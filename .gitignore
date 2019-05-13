@@ -1,0 +1,8 @@
+.vscode
+.ipynb_checkpoints/
+__pycache__/
+data/
+save/
+out/
+*.ipynb
+*.npy
