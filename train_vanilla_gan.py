@@ -90,14 +90,18 @@ if args.gmodel == 'mlp':
             normalization=args.gnorm),
         torch.nn.Tanh()
     )
-elif args.gmodel == 'resnet':
+elif args.gmodel == 'tree':
     generator = torch.nn.Sequential(
-        models.ResNetGenerator(
-            block=models.PreActResidualBlock,
+        models.SoftTreeDecoder(
             channels=args.g_layers,
-            layers=[1, 1, 1, 1],
             input_shape=args.input_shape,
-            latent_dim=args.z_dim),
+            latent_dim=args.z_dim,
+            std=0.02,
+            activation=torch.nn.ReLU(),
+            normalization=args.gnorm,
+            depth=5,
+            projection=False
+            ),
         torch.nn.Tanh()
     )
 else:
@@ -120,15 +124,15 @@ if args.dmodel == 'mlp':
         std=None,
         normalization=args.dnorm,
         conditional=CONDITIONAL)
-elif args.dmodel == 'resnet':
-    discriminator = models.ResNetDiscriminator(
-        block=models.PreActResidualBlock,
+elif args.dmodel == 'tree':
+    discriminator = models.SoftTreeEncoder(
         channels=args.d_layers,
-        layers=[1, 1, 1, 1],
         input_shape=[num_of_channels, height, width],
         latent_dim=1,
-        conditional=CONDITIONAL,
-        num_classes=num_of_classes)
+        activation=torch.nn.LeakyReLU(0.2),
+        depth=4,
+        projection=False
+        )
 else:
     discriminator = models.ConvEncoder(
         channels=args.d_layers,
