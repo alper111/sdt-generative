@@ -287,13 +287,7 @@ for e in range(args.epoch):
 
     generator.eval()
     discriminator.eval()
-    if CONDITIONAL:
-        z = torch.randn(10*num_of_classes, args.z_dim, device=DEVICE)
-        for j in range(num_of_classes):
-            z[(num_of_classes)*j:(num_of_classes)*(j+1), (args.z_dim-num_of_classes):] = torch.eye(num_of_classes)[j]
-    else:
-        z = torch.randn(100, args.z_dim, device=DEVICE)
-    samples = generator(z).cpu().detach() * 0.5 + 0.5
+    samples = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
     if args.gmodel == 'mlp':
         samples = samples.view(-1, num_of_channels, height, width)
     torchvision.utils.save_image(samples, args.out+'gan_{0}.png'.format(e+1), nrow=10)
@@ -305,10 +299,7 @@ for e in range(args.epoch):
         if ACC:
             fake_feats = torch.empty(test_size, 2048)
         for xx in range(test_size // 100):
-            z = torch.randn(100, args.z_dim, device=DEVICE)
-            if CONDITIONAL:
-                z[:, (args.z_dim-num_of_classes):] = torch.eye(num_of_classes)[torch.randint(0, num_of_classes, (100,))]
-            fake_samples[xx*100:(xx+1)*100] = generator(z).cpu().detach().view(-1, num_of_channels, height, width)*0.5+0.5
+            fake_samples[xx*100:(xx+1)*100] = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach().view(-1, num_of_channels, height, width)*0.5+0.5
             if ACC:
                 fake_feats[xx*100:(xx+1)*100] = inception(fake_samples[xx*100:(xx+1)*100].to(DEVICE)).cpu()
         if ACC:
