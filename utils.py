@@ -9,8 +9,6 @@ if os.environ.get('DISPLAY','') == '':
 import matplotlib.pyplot as plt
 from matplotlib import animation, rc
 from scipy.linalg import sqrtm
-from lapsolver import solve_dense
-from models import laplacian_pyramid
 
 def p2dist(x, y):
     return torch.pow(x, 2).sum(dim=1).view(-1,1) - 2 * torch.matmul(x, y.t()) + torch.pow(y, 2).sum(dim=1)
@@ -33,62 +31,6 @@ def sample_pball(n,p, device=torch.device('cpu')):
     direction = mult / mult.norm(dim=1).view(-1, 1)
     magnitude = (torch.pow(torch.rand(n, device=device), 1./p)).view(-1, 1)
     return direction*magnitude
-
-def sample_nearest(x_gen, x_real, mode='max', perplexity=64):
-    energy = -p2dist(x_gen, x_real)
-    if mode == 'max':
-        selected_indices = energy.argmax(dim=1)
-    elif mode == 'probabilistic':
-        N = x_real.shape[0]
-        for i, l_i in enumerate(energy, 0):
-            varmin = 0.0
-            varmax = -1.0
-            variance = 1.0
-            error = 10.0
-            while error > 1.0:
-                p_i = torch.softmax(l_i/variance, dim=0)
-                p_i = torch.max(p_i, 1e-12 * torch.ones_like(p_i))
-                entropy = -(p_i * torch.log(p_i)).sum()
-                current_perplexity = torch.exp(entropy)
-                error = torch.abs(perplexity-current_perplexity)
-                if current_perplexity > perplexity:
-                    varmax = variance
-                    variance = (varmin + varmax) / 2.
-                else:
-                    varmin = variance
-                    if varmax == -1:
-                        variance = variance * 2
-                    else:
-                        variance = (varmin + varmax) / 2.
-            energy[i] = p_i
-        distribution = torch.distributions.categorical.Categorical(probs=energy)
-        selected_indices = distribution.sample()
-    else:
-        _, ind = energy.topk(k=2, dim=1, largest=True)
-        selected_indices = ind[:, 1]
-    count = len(torch.unique(selected_indices))
-    return selected_indices, count
-
-def topkneighbour(x, k=20):
-    distances = p2dist(x, x)
-    dists, indices = distances.topk(k=k+1, largest=False)
-    return dists[:, 1:], indices[:, 1:]
-
-def hungarian_match(x, y):
-    distances = p2dist(x, y)
-    r, c = solve_dense(distances.cpu())
-    return c, distances[r, c].sum().item()
-
-def create_laplace_vector(x, kernel, levels):
-    batch_size = x.shape[0]
-    out = laplacian_pyramid(img=x*0.5+0.5, kernel=kernel, max_levels=levels)
-    for i in range(levels):
-        x = torch.cat([x.view(batch_size, -1), (2**(2*i))*out[i].view(batch_size, -1)], dim=1)
-    return x
-
-def NEGLoss(x, y):
-    batch_size = x.shape[0]
-    return -1 * torch.nn.functional.logsigmoid((x.view(batch_size, -1) * y.view(batch_size, -1)).sum(dim=1)).mean()
 
 def FID_score(x_real, x_fake):
     mu_real = x_real.mean(dim=0)
