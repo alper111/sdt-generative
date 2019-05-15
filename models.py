@@ -408,6 +408,53 @@ class SoftTree(torch.nn.Module):
                 node_densities = torch.cat([node_densities, current_left, current_right], dim=1)
         return node_densities
 
+class SoftTreeDecoder(torch.nn.Module):
+    def __init__(self, channels, input_shape, latent_dim, depth, activation=torch.nn.ReLU(), dropout=0.0, projection=False, std=None, normalization=None):
+        super(SoftTreeDecoder, self).__init__()
+        self.input_shape = input_shape
+        self.tree = SoftTree(in_features=latent_dim, out_features=input_shape[0] * input_shape[1] * input_shape[2], depth=depth, dropout=dropout, projection=projection)
+
+        convolutions = []
+        current_shape = input_shape
+        for ch in channels[:-1]:
+            convolutions.append(ConvTranspose2d(in_channels=current_shape[0], out_channels=ch, kernel_size=4, stride=2, padding=1, std=std))
+            current_shape = [ch, current_shape[1] * 2, current_shape[2] * 2]
+            if normalization == 'batch_norm':
+                convolutions.append(torch.nn.BatchNorm2d(ch))
+            elif normalization == 'layer_norm':
+                convolutions.append(torch.nn.LayerNorm(current_shape))
+            convolutions.append(activation)
+        convolutions.append(ConvTranspose2d(in_channels=current_shape[0], out_channels=channels[-1], kernel_size=4, stride=2, padding=1, std=std))
+        self.convolutions = torch.nn.Sequential(*convolutions)
+
+    def forward(self, x):
+        out = self.tree(x)
+        out = out.view(-1, self.input_shape[0], self.input_shape[1], self.input_shape[2])
+        out = self.convolutions(out)
+        return out
+
+class SoftTreeEncoder(torch.nn.Module):
+    def __init__(self, channels, input_shape, latent_dim, depth, activation=torch.nn.ReLU(), dropout=0.0, projection=False, std=None, normalization=None):
+        super(SoftTreeEncoder, self).__init__()
+        convolutions = []
+        current_shape = input_shape
+        for ch in channels:
+            convolutions.append(Conv2d(in_channels=current_shape[0], out_channels=ch, kernel_size=4, stride=2, padding=1, std=std))
+            current_shape = [ch, current_shape[1] // 2, current_shape[2] // 2]
+            if normalization == 'batch_norm':
+                convolutions.append(torch.nn.BatchNorm2d(ch))
+            elif normalization == 'layer_norm':
+                convolutions.append(torch.nn.LayerNorm(current_shape))
+            convolutions.append(activation)
+        self.convolutions = torch.nn.Sequential(*convolutions)
+        self.tree = SoftTree(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=latent_dim, depth=depth, dropout=dropout, projection=projection)
+
+    def forward(self, x):
+        out = self.convolutions(x)
+        out = out.view(out.shape[0], -1)
+        out = self.tree(out)
+        return out
+
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):
     def __init__(self):
