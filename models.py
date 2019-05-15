@@ -326,6 +326,86 @@ class ResNetDiscriminator(torch.nn.Module):
             out = self.dense(out)
         return out
 
+class SoftTree(torch.nn.Module):
+    
+    def __init__(self, in_features, out_features, depth, projection=False, dropout=0.0):
+        super(SoftTree, self).__init__()
+        self.proj = projection
+        self.depth = depth
+        self.in_features = in_features
+        self.out_features = out_features
+        self.leaf_count = int(numpy.power(2,depth))
+        self.gate_count = int(self.leaf_count - 1)
+        self.gw = torch.nn.Parameter(
+            torch.nn.init.kaiming_normal_(
+                torch.empty(self.gate_count, in_features), nonlinearity='sigmoid').t())
+        self.gb = torch.nn.Parameter(torch.zeros(self.gate_count))
+        self.drop = torch.nn.Dropout(p=dropout)
+        if self.proj:
+            self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*self.leaf_count, in_features), nonlinearity='linear')
+            self.pw = torch.nn.Parameter(self.pw.view(out_features, self.leaf_count, in_features).permute(0, 2, 1))
+            self.pb = torch.nn.Parameter(torch.zeros(out_features, self.leaf_count))
+        else:
+            # find a better init for this.
+            self.z = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
+        
+    def forward(self,x):
+        gw_ = self.drop(self.gw)
+        gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
+        leaf_probs = None
+        for i in range(self.leaf_count):
+            gateways = numpy.binary_repr(i,width=self.depth)
+            index = 1
+            probs = None
+            for j in range(self.depth):
+                if j == 0:
+                    if gateways[j] == '0':
+                        probs = gatings[:,index-1]
+                        index = 2 * index
+                    else:
+                        probs = 1-gatings[:,index-1]
+                        index = 2 * index + 1
+                else:
+                    if gateways[j] == '0':
+                        probs = probs * gatings[:,index-1]
+                        index = 2 * index
+                    else:
+                        probs = probs * (1-gatings[:,index-1])
+                        index = 2 * index + 1
+            if i == 0:
+                leaf_probs = probs
+            else:
+                leaf_probs = torch.cat([leaf_probs,probs],dim=0)
+        leaf_probs = leaf_probs.view(self.leaf_count,-1)
+        if self.proj:
+            gated_projection = torch.matmul(self.pw,leaf_probs).permute(2,0,1)
+            gated_bias = torch.matmul(self.pb,leaf_probs).permute(1,0)
+            result = torch.matmul(gated_projection,x.view(-1,self.in_features,1))[:,:,0] + gated_bias
+        else:
+            result = torch.matmul(self.z,leaf_probs).permute(1,0)
+        return result
+    
+    def extra_repr(self):
+        return "SoftTree(in_features=%d, out_features=%d, depth=%d, projection=%s)" % (
+            self.in_features,
+            self.out_features,
+            self.depth,
+            self.proj)
+    
+    def node_densities(self, x):
+        with torch.no_grad():
+            gw_ = self.drop(self.gw)
+            gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
+            node_densities = gatings[:,0].view(-1, 1)
+            node_densities = torch.cat([node_densities, (1-gatings[:,0]).view(-1, 1)], dim=1)
+            for i in range(1, self.gate_count):
+                parent = i - 1
+                parent_gating = node_densities[:, parent]
+                current_left = torch.mul(parent_gating, gatings[:, i]).view(-1, 1)
+                current_right = torch.mul(parent_gating, 1-gatings[:, i]).view(-1, 1)
+                node_densities = torch.cat([node_densities, current_left, current_right], dim=1)
+        return node_densities
+
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):
     def __init__(self):
