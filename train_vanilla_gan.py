@@ -41,14 +41,12 @@ parser.add_argument('-encoder',type=str)
 parser.add_argument('-c_iter',help='number of times the discriminator is trained. default 1.',type=int,default=1)
 parser.add_argument('-topk',default=1,help='k-nn accuracy. default 1',type=int)
 parser.add_argument('-acc', default=0, type=int)
-parser.add_argument('-cond', default=0, type=int)
 parser.add_argument('-ckpt', help='checkpoint', type=str, default=None)
 
 args = parser.parse_args()
 
 WASSERSTEIN = True if args.wasserstein == 1 else False
 ACC = True if args.acc == 1 else False
-CONDITIONAL = True if args.cond == 1 else False
 DEVICE = torch.device(args.device)
 CRITIC_ITER = args.c_iter
 print(args)
@@ -122,8 +120,7 @@ if args.dmodel == 'mlp':
         layer_info=args.d_layers,
         activation=eval(args.activation),
         std=None,
-        normalization=args.dnorm,
-        conditional=CONDITIONAL)
+        normalization=args.dnorm)
 elif args.dmodel == 'tree':
     discriminator = models.SoftTreeEncoder(
         channels=args.d_layers,
@@ -141,7 +138,6 @@ else:
         activation=torch.nn.LeakyReLU(0.2),
         std=0.02,
         normalization=args.dnorm,
-        conditional=CONDITIONAL,
         num_classes=num_of_classes)
         
 if args.ckpt is not None:
@@ -212,30 +208,21 @@ for e in range(args.epoch):
         for c in range(CRITIC_ITER):
             # train discriminator with real data
             optimD.zero_grad()
-            x_real, y_real = iterator.next()
+            x_real, _ = iterator.next()
             x_real = x_real.to(DEVICE)
-            if CONDITIONAL:
-                y_real = torch.eye(10, device=DEVICE)[y_real]
-            else:
-                y_real = None
 
             if args.dmodel == 'mlp':
                 x_real = x_real.view(-1,feature_size)
-            d_real = discriminator(x_real, y_real)
+            d_real = discriminator(x_real)
             if WASSERSTEIN:
                 d_real_loss = -d_real.mean()
             else:
                 d_real_loss = criterion(d_real,torch.ones_like(d_real,device=DEVICE))
             # train discriminator with fake data
-            z = torch.randn(args.z_batch, args.z_dim, device=DEVICE)
-            y_fake = None
-            if CONDITIONAL:
-                z[:, (args.z_dim-num_of_classes):] = torch.eye(num_of_classes)[torch.randint(0, num_of_classes, (args.z_batch,))]
-                y_fake = z[:, (args.z_dim-10):]
-            x_fake = generator(z).view(-1,num_of_channels,height,width)
+            x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
             if args.dmodel == 'mlp':
                 x_fake = x_fake.view(-1,feature_size)
-            d_fake = discriminator(x_fake, y_fake)
+            d_fake = discriminator(x_fake)
             if WASSERSTEIN:
                 d_fake_loss = d_fake.mean()
             else:
@@ -243,7 +230,7 @@ for e in range(args.epoch):
             
             d_loss = d_real_loss + d_fake_loss
             if WASSERSTEIN:
-                d_loss += utils.gradient_penalty(discriminator,x_real, x_fake, 1.0, DEVICE, y_real, y_fake)
+                d_loss += utils.gradient_penalty(discriminator,x_real, x_fake, 1.0, DEVICE)
             d_loss.backward()
             optimD.step()
             disc_avg_loss += d_loss.item()
@@ -255,15 +242,10 @@ for e in range(args.epoch):
         for p in discriminator.parameters():
             p.requires_grad = False
         optimG.zero_grad()
-        z = torch.randn(args.z_batch, args.z_dim, device=DEVICE)
-        y_fake = None
-        if CONDITIONAL:
-            z[:, (args.z_dim-num_of_classes):] = torch.eye(num_of_classes)[torch.randint(0, num_of_classes, (args.z_batch,))]
-            y_fake = z[:, (args.z_dim-10):]
-        x_fake = generator(z).view(-1,num_of_channels,height,width)
+        x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
         if args.dmodel == 'mlp':
             x_fake = x_fake.view(-1,feature_size)
-        g_loss = discriminator(x_fake, y_fake)
+        g_loss = discriminator(x_fake)
         if WASSERSTEIN:
             g_loss = -g_loss.mean()
         else:

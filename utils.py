@@ -43,21 +43,16 @@ def FID_score(x_real, x_fake):
     return mu_diff + cov_diff.real
 
 '''gradient penalty that is used in https://arxiv.org/abs/1704.00028'''
-def gradient_penalty(D, x_true, x_fake, derivative, device, y_true=None, y_fake=None):
+def gradient_penalty(D, x_true, x_fake, derivative, device):
     if len(x_true.shape) == 2:
         alpha = torch.rand(x_true.size()[0],1,device=device)
     else:
         alpha = torch.rand(x_true.size()[0],1,1,1,device=device)
 
-    if y_true is not None:
-        y_interpolate = alpha.view(-1, 1) * y_true + (1-alpha.view(-1, 1)) * y_fake
-    else:
-        y_interpolate = None
-    alpha = alpha.expand(x_true.size())
-    
+    alpha = alpha.expand(x_true.size())    
     interpolates = alpha * x_true + (1-alpha) * x_fake
     interpolates = torch.autograd.Variable(interpolates,requires_grad=True)
-    disc_interpolates = D(interpolates, y_interpolate)
+    disc_interpolates = D(interpolates)
     gradients = torch.autograd.grad(outputs=disc_interpolates,
                                     inputs=interpolates,
                                     grad_outputs=torch.ones(disc_interpolates.size(),device=device),
