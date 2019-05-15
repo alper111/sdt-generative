@@ -15,6 +15,7 @@ if os.environ.get('DISPLAY','') == '':
     mpl.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Train a GAN.')
 parser.add_argument('-gmodel',help='generator model. mlp, resnet or conv',type=str,required=True)
@@ -203,7 +204,7 @@ for e in range(args.epoch):
     # batch loop
     start = time.time()
     iterator = iter(trainloader)
-    for i in range(loop_per_epoch):
+    for i in tqdm(range(loop_per_epoch)):
         for c in range(CRITIC_ITER):
             # train discriminator with real data
             optimD.zero_grad()
