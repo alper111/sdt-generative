@@ -97,8 +97,8 @@ elif args.gmodel == 'tree':
             std=0.02,
             activation=torch.nn.ReLU(),
             normalization=args.gnorm,
-            depth=5,
-            projection=False
+            depth=6,
+            projection='constant'
             ),
         torch.nn.Tanh()
     )
@@ -127,8 +127,8 @@ elif args.dmodel == 'tree':
         input_shape=[num_of_channels, height, width],
         latent_dim=1,
         activation=torch.nn.LeakyReLU(0.2),
-        depth=4,
-        projection=False
+        depth=6,
+        projection='constant'
         )
 else:
     discriminator = models.ConvEncoder(

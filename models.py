@@ -328,7 +328,7 @@ class ResNetDiscriminator(torch.nn.Module):
 
 class SoftTree(torch.nn.Module):
     
-    def __init__(self, in_features, out_features, depth, projection=False, dropout=0.0):
+    def __init__(self, in_features, out_features, depth, projection='constant', dropout=0.0):
         super(SoftTree, self).__init__()
         self.proj = projection
         self.depth = depth
@@ -343,13 +343,16 @@ class SoftTree(torch.nn.Module):
         # dropout rate for gating weights.
         # see: Ahmetoglu et al. 2018 https://doi.org/10.1007/978-3-030-01418-6_14
         self.drop = torch.nn.Dropout(p=dropout)
-        if self.proj:
+        if self.proj == 'linear':
             self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*self.leaf_count, in_features), nonlinearity='linear')
             self.pw = torch.nn.Parameter(self.pw.view(out_features, self.leaf_count, in_features).permute(0, 2, 1))
             self.pb = torch.nn.Parameter(torch.zeros(out_features, self.leaf_count))
-        else:
+        elif self.proj == 'constant':
             # find a better init for this.
             self.z = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
+        elif self.proj == 'gmm':
+            self.mu = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
+            self.std = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
         
     def forward(self,x):
         gw_ = self.drop(self.gw)
@@ -379,12 +382,19 @@ class SoftTree(torch.nn.Module):
             else:
                 leaf_probs = torch.cat([leaf_probs,probs],dim=0)
         leaf_probs = leaf_probs.view(self.leaf_count,-1)
-        if self.proj:
+        if self.proj == 'linear':
             gated_projection = torch.matmul(self.pw,leaf_probs).permute(2,0,1)
             gated_bias = torch.matmul(self.pb,leaf_probs).permute(1,0)
             result = torch.matmul(gated_projection,x.view(-1,self.in_features,1))[:,:,0] + gated_bias
-        else:
+        elif self.proj == 'constant':
             result = torch.matmul(self.z,leaf_probs).permute(1,0)
+        elif self.proj == 'gmm':
+            mu = self.mu.view(1, self.out_features, self.leaf_count)
+            std = self.std.view(1, self.out_features, self.leaf_count)
+            eps = torch.randn(x.shape[0], self.out_features, self.leaf_count)
+            z = mu + std * eps
+            leaf_probs = leaf_probs.t().view(-1, self.leaf_count, 1)
+            result = torch.bmm(z, leaf_probs)[:, :, 0]
         return result
     
     def extra_repr(self):
