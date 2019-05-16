@@ -391,7 +391,7 @@ class SoftTree(torch.nn.Module):
         elif self.proj == 'gmm':
             mu = self.mu.view(1, self.out_features, self.leaf_count)
             std = self.std.view(1, self.out_features, self.leaf_count)
-            eps = torch.randn(x.shape[0], self.out_features, self.leaf_count)
+            eps = torch.randn(x.shape[0], self.out_features, self.leaf_count, device=x.device)
             z = mu + std * eps
             leaf_probs = leaf_probs.t().view(-1, self.leaf_count, 1)
             result = torch.bmm(z, leaf_probs)[:, :, 0]
