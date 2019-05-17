@@ -354,9 +354,11 @@ class SoftTree(torch.nn.Module):
             self.mu = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
             self.std = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
         
-    def forward(self,x):
+    def forward(self, x, gating_grad=True):
         gw_ = self.drop(self.gw)
         gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
+        if not gating_grad:
+            gatings = gatings.detach()
         leaf_probs = None
         for i in range(self.leaf_count):
             gateways = numpy.binary_repr(i,width=self.depth)

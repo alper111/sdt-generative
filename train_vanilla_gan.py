@@ -92,7 +92,7 @@ if args.gmodel == 'mlp':
         models.SoftTree(
             in_features=args.z_dim,
             out_features=feature_size,
-            depth=3,
+            depth=4,
             projection='linear'),
         torch.nn.Tanh())
 elif args.gmodel == 'tree':
@@ -258,7 +258,7 @@ for e in range(args.epoch):
         x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
         if args.dmodel == 'mlp':
             x_fake = x_fake.view(-1,feature_size)
-        g_loss = discriminator(x_fake)
+        g_loss = discriminator(x_fake, gating_grad=False)
         if WASSERSTEIN:
             g_loss = -g_loss.mean()
         else:
