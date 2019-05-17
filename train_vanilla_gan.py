@@ -80,14 +80,21 @@ disc_grads_total = []
 
 # generator definition
 if args.gmodel == 'mlp':
+    # generator = torch.nn.Sequential(
+    #     models.MLP(
+    #         layer_info=args.g_layers,
+    #         activation=torch.nn.ReLU(),
+    #         std=None,
+    #         normalization=args.gnorm),
+    #     torch.nn.Tanh()
+    # )
     generator = torch.nn.Sequential(
-        models.MLP(
-            layer_info=args.g_layers,
-            activation=torch.nn.ReLU(),
-            std=None,
-            normalization=args.gnorm),
-        torch.nn.Tanh()
-    )
+        models.SoftTree(
+            in_features=args.z_dim,
+            out_features=feature_size,
+            depth=3,
+            projection='linear'),
+        torch.nn.Tanh())
 elif args.gmodel == 'tree':
     generator = torch.nn.Sequential(
         models.SoftTreeDecoder(
@@ -116,11 +123,17 @@ else:
     )
 # discriminator definition
 if args.dmodel == 'mlp':
-    discriminator = models.MLP(
-        layer_info=args.d_layers,
-        activation=eval(args.activation),
-        std=None,
-        normalization=args.dnorm)
+    # discriminator = models.MLP(
+    #     layer_info=args.d_layers,
+    #     activation=eval(args.activation),
+    #     std=None,
+    #     normalization=args.dnorm)
+    discriminator = models.SoftTree(
+        in_features=feature_size,
+        out_features=1,
+        depth=4,
+        projection='linear'
+    )
 elif args.dmodel == 'tree':
     discriminator = models.SoftTreeEncoder(
         channels=args.d_layers,
