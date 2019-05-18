@@ -54,7 +54,7 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
             trainset = IndexedDataset(trainset)
             testset = IndexedDataset(testset)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=50, num_workers=4)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 60000
         test_size = 10000
         num_of_classes = 10
@@ -68,7 +68,7 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
         trainset.train_data = trainset.train_data.permute(0, 2, 1)
         testset.test_data = testset.test_data.permute(0, 2, 1)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=50, num_workers=4)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 112800
         test_size = 10000
         num_of_classes = trainset.targets.max().item()+1
@@ -80,7 +80,7 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
         trainset = torchvision.datasets.FashionMNIST(root='./data', train=True, download=True, transform=transform)
         testset = torchvision.datasets.FashionMNIST(root='./data', train=False, download=True, transform=transform)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=50, num_workers=4)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 60000
         test_size = 10000
         num_of_classes = trainset.targets.max().item()+1
@@ -91,7 +91,7 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
         trainset = torchvision.datasets.CIFAR10(root='./data',train=True,download=True,transform=transform)
         testset = torchvision.datasets.CIFAR10(root='./data',train=False,download=True,transform=transform)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=50, num_workers=4)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 50000
         test_size = 10000
         num_of_classes = trainset.targets.max().item()+1
@@ -102,7 +102,7 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
         trainset = torchvision.datasets.STL10(root='./data', split='train', download=True,transform=transform)
         testset = torchvision.datasets.STL10(root='./data', split='test', download=True,transform=transform)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=50, num_workers=4)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 5000
         test_size = 8000
         num_of_classes = trainset.targets.max().item()+1
