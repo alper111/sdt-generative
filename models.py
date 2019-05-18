@@ -398,7 +398,7 @@ class SoftTree(torch.nn.Module):
         return result
     
     def extra_repr(self):
-        return "SoftTree(in_features=%d, out_features=%d, depth=%d, projection=%s)" % (
+        return "in_features=%d, out_features=%d, depth=%d, projection=%s" % (
             self.in_features,
             self.out_features,
             self.depth,
@@ -464,6 +464,53 @@ class SoftTreeEncoder(torch.nn.Module):
         out = out.view(out.shape[0], -1)
         out = self.tree(out)
         return out
+
+class MoE(torch.nn.Module):
+    
+    def __init__(self, in_features, out_features, num_leafs, projection='constant', dropout=0.0):
+        super(MoE, self).__init__()
+        self.proj = projection
+        self.num_leafs = num_leafs
+        self.in_features = in_features
+        self.out_features = out_features
+        self.gw = torch.nn.Parameter(
+            torch.nn.init.xavier_normal_(
+                torch.empty(in_features, num_leafs)))
+        self.gb = torch.nn.Parameter(torch.zeros(num_leafs))
+        if self.proj == 'linear':
+            self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*num_leafs, in_features), nonlinearity='linear')
+            self.pw = torch.nn.Parameter(self.pw.view(out_features, num_leafs, in_features).permute(0, 2, 1))
+            self.pb = torch.nn.Parameter(torch.zeros(out_features, num_leafs))
+        elif self.proj == 'constant':
+            # find a better init for this.
+            self.z = torch.nn.Parameter(torch.randn(out_features, num_leafs))
+        elif self.proj == 'gmm':
+            self.mu = torch.nn.Parameter(torch.randn(out_features, num_leafs))
+            self.std = torch.nn.Parameter(torch.randn(out_features, num_leafs))
+        
+    def forward(self, x):
+        gatings = torch.softmax(torch.add(torch.matmul(x,self.gw),self.gb), dim=1).t()
+        if self.proj == 'linear':
+            gated_projection = torch.matmul(self.pw, gatings).permute(2,0,1)
+            gated_bias = torch.matmul(self.pb, gatings).permute(1,0)
+            result = torch.matmul(gated_projection,x.view(-1,self.in_features,1))[:,:,0] + gated_bias
+        elif self.proj == 'constant':
+            result = torch.matmul(self.z, gatings).permute(1,0)
+        elif self.proj == 'gmm':
+            mu = self.mu.view(1, self.out_features, self.num_leafs)
+            std = self.std.view(1, self.out_features, self.num_leafs)
+            eps = torch.randn(x.shape[0], self.out_features, self.num_leafs, device=x.device)
+            z = mu + std * eps
+            gatings = gatings.t().view(-1, self.num_leafs, 1)
+            result = torch.bmm(z, gatings)[:, :, 0]
+        return result, gatings
+    
+    def extra_repr(self):
+        return "in_features=%d, out_features=%d, num_leafs=%d, projection=%s" % (
+            self.in_features,
+            self.out_features,
+            self.num_leafs,
+            self.proj)
 
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):
