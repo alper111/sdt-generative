@@ -190,14 +190,14 @@ if ACC:
     ### get real samples' inception activations
     real_feats = torch.empty(test_size, 2048)
     iterator = iter(testloader)
-    for i in range(test_size // 50):
+    for i in range(test_size // 100):
         x_t = iterator.next()[0]*0.5+0.5
-        real_feats[i*50:(i+1)*50] = inception(x_t.to(DEVICE)).cpu()
+        real_feats[i*100:(i+1)*100] = inception(x_t.to(DEVICE)).cpu()
 real_samples = torch.empty(test_size, feature_size)
 iterator = iter(testloader)
-for i in range(test_size // 50):
+for i in range(test_size // 100):
     x_t = iterator.next()[0]
-    real_samples[i*50:(i+1)*50] = x_t.view(-1, feature_size)
+    real_samples[i*100:(i+1)*100] = x_t.view(-1, feature_size)
 
 
 print("Training starts...")
@@ -298,7 +298,7 @@ for e in range(args.epoch):
     torchvision.utils.save_image(samples, args.out+'gan_{0}.png'.format(e+1), nrow=10)
 
     # 1-nn accuracy
-    if (e+1) % 10 == 0:
+    if (e+1) % 5 == 0:
         print("calculating nn accuracy...")
         fake_samples = torch.empty(test_size, num_of_channels, height, width)
         if ACC:
