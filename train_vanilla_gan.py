@@ -18,12 +18,16 @@ from matplotlib.backends.backend_pdf import PdfPages
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Train a GAN.')
-parser.add_argument('-gmodel',help='generator model. mlp, resnet or conv',type=str,required=True)
-parser.add_argument('-g_layers',help='generator layer info',nargs='+',type=int,required=True)
-parser.add_argument('-gnorm', help='generator normalization layer. batch_norm, layer_norm', type=str, default=None)
-parser.add_argument('-dmodel',help='discriminator model. mlp or conv',type=str,required=True)
+parser.add_argument('-g_model',help='generator model. mlp, resnet or conv',type=str,required=True)
+parser.add_argument('-g_layers',help='generator layer info', nargs='+',type=int,required=True)
+parser.add_argument('-g_depth', help='generator tree depth', type=int)
+parser.add_argument('-g_proj', help='generator leaf projection. default constant', type=str, default='constant')
+parser.add_argument('-g_norm', help='generator normalization layer. batch_norm, layer_norm', type=str, default=None)
+parser.add_argument('-d_model',help='discriminator model. mlp or conv',type=str,required=True)
 parser.add_argument('-d_layers',help='discriminator layer info',nargs='+',type=int,required=True)
-parser.add_argument('-dnorm', help='discriminator normalization layer. batch_norm, layer_norm', type=str, default=None)
+parser.add_argument('-d_depth', help='discriminator tree depth', type=int)
+parser.add_argument('-d_proj', help='discriminator leaf projection. default constant', type=str, default='constant')
+parser.add_argument('-d_norm', help='discriminator normalization layer. batch_norm, layer_norm', type=str, default=None)
 parser.add_argument('-input_shape',help='if you use conv generator, this is the dimension from which gen starts deconving.',nargs='+',type=int)
 parser.add_argument('-activation',help='for MLP only! default relu',type=str, default='torch.nn.ReLU()')
 parser.add_argument('-z_dim',help='dimensionality of z. default 64', default=64, type=int)
@@ -79,23 +83,16 @@ gen_grads_total = []
 disc_grads_total = []
 
 # generator definition
-if args.gmodel == 'mlp':
-    # generator = torch.nn.Sequential(
-    #     models.MLP(
-    #         layer_info=args.g_layers,
-    #         activation=torch.nn.ReLU(),
-    #         std=None,
-    #         normalization=args.gnorm),
-    #     torch.nn.Tanh()
-    # )
+if args.g_model == 'mlp':
     generator = torch.nn.Sequential(
-        models.SoftTree(
-            in_features=args.z_dim,
-            out_features=feature_size,
-            depth=4,
-            projection='linear'),
-        torch.nn.Tanh())
-elif args.gmodel == 'tree':
+        models.MLP(
+            layer_info=args.g_layers,
+            activation=torch.nn.ReLU(),
+            std=None,
+            normalization=args.g_norm),
+        torch.nn.Tanh()
+    )
+elif args.g_model == 'tree':
     generator = torch.nn.Sequential(
         models.SoftTreeDecoder(
             channels=args.g_layers,
@@ -103,9 +100,9 @@ elif args.gmodel == 'tree':
             latent_dim=args.z_dim,
             std=0.02,
             activation=torch.nn.ReLU(),
-            normalization=args.gnorm,
-            depth=6,
-            projection='constant'
+            normalization=args.g_norm,
+            depth=args.g_depth,
+            projection=args.g_proj
             ),
         torch.nn.Tanh()
     )
@@ -117,31 +114,26 @@ else:
             latent_dim=args.z_dim,
             std=0.02,
             activation=torch.nn.ReLU(),
-            normalization=args.gnorm
+            normalization=args.g_norm
         ),
         torch.nn.Tanh()
     )
 # discriminator definition
-if args.dmodel == 'mlp':
-    # discriminator = models.MLP(
-    #     layer_info=args.d_layers,
-    #     activation=eval(args.activation),
-    #     std=None,
-    #     normalization=args.dnorm)
-    discriminator = models.SoftTree(
-        in_features=feature_size,
-        out_features=1,
-        depth=4,
-        projection='linear'
-    )
-elif args.dmodel == 'tree':
+if args.d_model == 'mlp':
+    discriminator = models.MLP(
+        layer_info=args.d_layers,
+        activation=eval(args.activation),
+        std=None,
+        normalization=args.d_norm)
+elif args.d_model == 'tree':
     discriminator = models.SoftTreeEncoder(
         channels=args.d_layers,
         input_shape=[num_of_channels, height, width],
         latent_dim=1,
         activation=torch.nn.LeakyReLU(0.2),
-        depth=6,
-        projection='constant'
+        normalization=args.d_norm,
+        depth=args.d_depth,
+        projection=args.d_proj,
         )
 else:
     discriminator = models.ConvEncoder(
@@ -150,7 +142,7 @@ else:
         latent_dim=1,
         activation=torch.nn.LeakyReLU(0.2),
         std=0.02,
-        normalization=args.dnorm,
+        normalization=args.d_norm,
         num_classes=num_of_classes)
         
 if args.ckpt is not None:
@@ -224,7 +216,7 @@ for e in range(args.epoch):
             x_real, _ = iterator.next()
             x_real = x_real.to(DEVICE)
 
-            if args.dmodel == 'mlp':
+            if args.d_model == 'mlp':
                 x_real = x_real.view(-1,feature_size)
             d_real = discriminator(x_real)
             if WASSERSTEIN:
@@ -233,7 +225,7 @@ for e in range(args.epoch):
                 d_real_loss = criterion(d_real,torch.ones_like(d_real,device=DEVICE))
             # train discriminator with fake data
             x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
-            if args.dmodel == 'mlp':
+            if args.d_model == 'mlp':
                 x_fake = x_fake.view(-1,feature_size)
             d_fake = discriminator(x_fake)
             if WASSERSTEIN:
@@ -256,7 +248,7 @@ for e in range(args.epoch):
             p.requires_grad = False
         optimG.zero_grad()
         x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
-        if args.dmodel == 'mlp':
+        if args.d_model == 'mlp':
             x_fake = x_fake.view(-1,feature_size)
         g_loss = discriminator(x_fake)
         if WASSERSTEIN:
@@ -301,7 +293,7 @@ for e in range(args.epoch):
     generator.eval()
     discriminator.eval()
     samples = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
-    if args.gmodel == 'mlp':
+    if args.g_model == 'mlp':
         samples = samples.view(-1, num_of_channels, height, width)
     torchvision.utils.save_image(samples, args.out+'gan_{0}.png'.format(e+1), nrow=10)
 
