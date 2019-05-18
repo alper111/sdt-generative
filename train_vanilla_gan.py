@@ -258,7 +258,7 @@ for e in range(args.epoch):
         x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
         if args.dmodel == 'mlp':
             x_fake = x_fake.view(-1,feature_size)
-        g_loss = discriminator(x_fake, gating_grad=False)
+        g_loss = discriminator(x_fake)
         if WASSERSTEIN:
             g_loss = -g_loss.mean()
         else:
