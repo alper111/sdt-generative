@@ -1,4 +1,4 @@
-import argparse
+import args
 import os
 import numpy as np
 import torch
@@ -16,48 +16,15 @@ if os.environ.get('DISPLAY','') == '':
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from tqdm import tqdm
+from shutil import copyfile
 
-parser = argparse.ArgumentParser(description='Train a GAN.')
-parser.add_argument('-g_model',help='generator model. mlp, resnet or conv',type=str,required=True)
-parser.add_argument('-g_layers',help='generator layer info', nargs='+',type=int,required=True)
-parser.add_argument('-g_depth', help='generator tree depth', type=int)
-parser.add_argument('-g_proj', help='generator leaf projection. default constant', type=str, default='constant')
-parser.add_argument('-g_norm', help='generator normalization layer. batch_norm, layer_norm', type=str, default=None)
-parser.add_argument('-d_model',help='discriminator model. mlp or conv',type=str,required=True)
-parser.add_argument('-d_layers',help='discriminator layer info',nargs='+',type=int,required=True)
-parser.add_argument('-d_depth', help='discriminator tree depth', type=int)
-parser.add_argument('-d_proj', help='discriminator leaf projection. default constant', type=str, default='constant')
-parser.add_argument('-d_norm', help='discriminator normalization layer. batch_norm, layer_norm', type=str, default=None)
-parser.add_argument('-input_shape',help='if you use conv generator, this is the dimension from which gen starts deconving.',nargs='+',type=int)
-parser.add_argument('-activation',help='for MLP only! default relu',type=str, default='torch.nn.ReLU()')
-parser.add_argument('-z_dim',help='dimensionality of z. default 64', default=64, type=int)
-parser.add_argument('-z_batch',help='z batch size. default 16',default=16,type=int)
-parser.add_argument('-lr',help='learning rate. default 1e-3',default=1e-3,type=float)
-parser.add_argument('-lr_decay',help='decay rate of learning rate. default 1.',default=1.0,type=float)
-parser.add_argument('-lr_step',help='decay step size. default 1.',default=1,type=int)
-parser.add_argument('-wasserstein',help='whether to use Wasserstein GP loss or not. default 0',default=0,type=int)
-parser.add_argument('-epoch',default=300,type=int)
-parser.add_argument('-out',help='output folder.',type=str,required=True)
-parser.add_argument('-seed',help='seed. default 2019.',default=2019,type=int)
-parser.add_argument('-device',help='default cpu',default='cpu',type=str)
-parser.add_argument('-dataset',default='mnist',type=str)
-parser.add_argument('-encoder',type=str)
-parser.add_argument('-c_iter',help='number of times the discriminator is trained. default 1.',type=int,default=1)
-parser.add_argument('-topk',default=1,help='k-nn accuracy. default 1',type=int)
-parser.add_argument('-acc', default=0, type=int)
-parser.add_argument('-ckpt', help='checkpoint', type=str, default=None)
-
-args = parser.parse_args()
-
-WASSERSTEIN = True if args.wasserstein == 1 else False
-ACC = True if args.acc == 1 else False
 DEVICE = torch.device(args.device)
-CRITIC_ITER = args.c_iter
-print(args)
+os.system('cat args.py')
 
 if not os.path.exists(args.out):
     os.makedirs(args.out)
-print(args,file=open(args.out+"args.txt","w"))
+opts = os.path.join(args.out, 'args.txt')
+copyfile('args.py', opts)
 
 np.random.seed(args.seed)
 torch.random.manual_seed(args.seed)
@@ -72,7 +39,7 @@ height = dummy.shape[2]
 width = dummy.shape[3]
 img_size = height * width
 feature_size = num_of_channels * img_size
-loop_per_epoch = train_size // (args.z_batch * CRITIC_ITER)
+loop_per_epoch = train_size // (args.z_batch * args.c_iter)
 total_loss = []
 real_acc_total = []
 fake_acc_total = []
@@ -181,7 +148,7 @@ for p in discriminator.parameters():
         n *= d
     disc_dim_normalizer.append(n**0.5)
 
-if ACC:
+if args.acc:
     ### load inception module
     inception = models.InceptionV3()
     for p in inception.parameters():
@@ -210,7 +177,7 @@ for e in range(args.epoch):
     start = time.time()
     iterator = iter(trainloader)
     for i in tqdm(range(loop_per_epoch)):
-        for c in range(CRITIC_ITER):
+        for c in range(args.c_iter):
             # train discriminator with real data
             optimD.zero_grad()
             x_real, _ = iterator.next()
@@ -219,7 +186,7 @@ for e in range(args.epoch):
             if args.d_model == 'mlp':
                 x_real = x_real.view(-1,feature_size)
             d_real = discriminator(x_real)
-            if WASSERSTEIN:
+            if args.wasserstein:
                 d_real_loss = -d_real.mean()
             else:
                 d_real_loss = criterion(d_real,torch.ones_like(d_real,device=DEVICE))
@@ -228,13 +195,13 @@ for e in range(args.epoch):
             if args.d_model == 'mlp':
                 x_fake = x_fake.view(-1,feature_size)
             d_fake = discriminator(x_fake)
-            if WASSERSTEIN:
+            if args.wasserstein:
                 d_fake_loss = d_fake.mean()
             else:
                 d_fake_loss = criterion(d_fake,torch.zeros_like(d_fake,device=DEVICE))
             
             d_loss = d_real_loss + d_fake_loss
-            if WASSERSTEIN:
+            if args.wasserstein:
                 d_loss += utils.gradient_penalty(discriminator,x_real, x_fake, 1.0, DEVICE)
             d_loss.backward()
             optimD.step()
@@ -251,7 +218,7 @@ for e in range(args.epoch):
         if args.d_model == 'mlp':
             x_fake = x_fake.view(-1,feature_size)
         g_loss = discriminator(x_fake)
-        if WASSERSTEIN:
+        if args.wasserstein:
             g_loss = -g_loss.mean()
         else:
             g_loss = criterion(g_loss,torch.ones_like(g_loss,device=DEVICE))
@@ -267,14 +234,14 @@ for e in range(args.epoch):
     schedulerG.step()
     schedulerD.step()
     gen_loss_total.append(gen_avg_loss/loop_per_epoch)
-    disc_loss_total.append(disc_avg_loss/(loop_per_epoch*CRITIC_ITER))
+    disc_loss_total.append(disc_avg_loss/(loop_per_epoch*args.c_iter))
     print("epoch: %d - disc loss: %.5f - gen loss: %.5f - time elapsed: %.3f" % (e+1, disc_loss_total[-1], gen_loss_total[-1], finish-start))
     
     ### accumulate gradients
     for g_i in range(len(gen_avg_gradients)):
         gen_avg_gradients[g_i] = gen_avg_gradients[g_i] / (loop_per_epoch * gen_dim_normalizer[g_i])
     for g_i in range(len(disc_avg_gradients)):
-        disc_avg_gradients[g_i] = disc_avg_gradients[g_i] / (loop_per_epoch*CRITIC_ITER*disc_dim_normalizer[g_i])
+        disc_avg_gradients[g_i] = disc_avg_gradients[g_i] / (loop_per_epoch*args.c_iter*disc_dim_normalizer[g_i])
     # print("g avg grads:", gen_avg_gradients)
     gen_grads_total.append(gen_avg_gradients.copy())
     disc_grads_total.append(disc_avg_gradients.copy())
@@ -301,13 +268,13 @@ for e in range(args.epoch):
     if (e+1) % 5 == 0:
         print("calculating nn accuracy...")
         fake_samples = torch.empty(test_size, num_of_channels, height, width)
-        if ACC:
+        if args.acc:
             fake_feats = torch.empty(test_size, 2048)
         for xx in range(test_size // 100):
             fake_samples[xx*100:(xx+1)*100] = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach().view(-1, num_of_channels, height, width)*0.5+0.5
-            if ACC:
+            if args.acc:
                 fake_feats[xx*100:(xx+1)*100] = inception(fake_samples[xx*100:(xx+1)*100].to(DEVICE)).cpu()
-        if ACC:
+        if args.acc:
             fid = utils.FID_score(x_real=real_feats, x_fake=fake_feats)
             fake_acc, real_acc = utils.nn_accuracy(p_fake=fake_feats.to(DEVICE), p_real=real_feats.to(DEVICE), device=DEVICE, k=args.topk)
         else:
