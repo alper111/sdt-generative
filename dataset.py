@@ -124,7 +124,7 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
         train_indices = torch.utils.data.SubsetRandomSampler(R[10000:])
         test_indices = torch.utils.data.SubsetRandomSampler(R[:10000])
         trainloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_indices)
-        testloader = torch.utils.data.DataLoader(dataset, batch_size=50, sampler=test_indices)
+        testloader = torch.utils.data.DataLoader(dataset, batch_size=100, sampler=test_indices)
         num_of_classes = 1
         train_size = dataset_size-10000
         test_size = 10000
