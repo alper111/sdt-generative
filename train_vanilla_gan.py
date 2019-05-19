@@ -59,21 +59,7 @@ if args.g_model == 'mlp':
             normalization=args.g_norm),
         torch.nn.Tanh()
     )
-elif args.g_model == 'tree':
-    generator = torch.nn.Sequential(
-        models.SoftTreeDecoder(
-            channels=args.g_layers,
-            input_shape=args.input_shape,
-            latent_dim=args.z_dim,
-            std=0.02,
-            activation=torch.nn.ReLU(),
-            normalization=args.g_norm,
-            depth=args.g_depth,
-            projection=args.g_proj
-            ),
-        torch.nn.Tanh()
-    )
-else:
+elif args.g_model == 'conv':
     generator = torch.nn.Sequential(
         models.ConvDecoder(
             channels=args.g_layers,
@@ -85,6 +71,21 @@ else:
         ),
         torch.nn.Tanh()
     )
+else:
+    generator = torch.nn.Sequential(
+        models.MixtureDecoder(
+            channels=args.g_layers,
+            input_shape=args.input_shape,
+            latent_dim=args.z_dim,
+            std=0.02,
+            activation=torch.nn.ReLU(),
+            normalization=args.g_norm,
+            mixture=args.g_model,
+            depth=args.g_depth,
+            projection=args.g_proj
+            ),
+        torch.nn.Tanh()
+    )
 # discriminator definition
 if args.d_model == 'mlp':
     discriminator = models.MLP(
@@ -92,17 +93,7 @@ if args.d_model == 'mlp':
         activation=eval(args.activation),
         std=None,
         normalization=args.d_norm)
-elif args.d_model == 'tree':
-    discriminator = models.SoftTreeEncoder(
-        channels=args.d_layers,
-        input_shape=[num_of_channels, height, width],
-        latent_dim=1,
-        activation=torch.nn.LeakyReLU(0.2),
-        normalization=args.d_norm,
-        depth=args.d_depth,
-        projection=args.d_proj,
-        )
-else:
+elif args.d_model == 'conv':
     discriminator = models.ConvEncoder(
         channels=args.d_layers,
         input_shape=[num_of_channels, height, width],
@@ -111,6 +102,17 @@ else:
         std=0.02,
         normalization=args.d_norm,
         num_classes=num_of_classes)
+else:
+    discriminator = models.MixtureEncoder(
+        channels=args.d_layers,
+        input_shape=[num_of_channels, height, width],
+        latent_dim=1,
+        activation=torch.nn.LeakyReLU(0.2),
+        normalization=args.d_norm,
+        mixture=args.d_model,
+        depth=args.d_depth,
+        projection=args.d_proj,
+        )
         
 if args.ckpt is not None:
     print("using checkpoint...")
