@@ -425,7 +425,7 @@ class MixtureDecoder(torch.nn.Module):
         if mixture == 'tree':
             self.mixture = SoftTree(in_features=latent_dim, out_features=input_shape[0] * input_shape[1] * input_shape[2], depth=depth, dropout=dropout, projection=projection)
         else:
-            self.mixture = MoE(in_features=latent_dim, out_features=input_shape[0] * input_shape[1] * input_shape[2], num_leafs=depth**2, projection=projection)
+            self.mixture = MoE(in_features=latent_dim, out_features=input_shape[0] * input_shape[1] * input_shape[2], num_leafs=2**depth, projection=projection)
 
         convolutions = []
         current_shape = input_shape
@@ -463,7 +463,7 @@ class MixtureEncoder(torch.nn.Module):
         if mixture == 'tree':
             self.mixture = SoftTree(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=latent_dim, depth=depth, dropout=dropout, projection=projection)
         else:
-            self.mixture = MoE(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=latent_dim, num_leafs=depth**2, projection=projection)
+            self.mixture = MoE(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=latent_dim, num_leafs=2**depth, projection=projection)
 
     def forward(self, x):
         out = self.convolutions(x)
