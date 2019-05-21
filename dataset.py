@@ -41,7 +41,7 @@ class IndexedDataset(torch.utils.data.Dataset):
         img, label = self.base[idx]
         return (img, label, idx)
 
-def get_dataset(name, batch_size, embedding=False, return_idx=False):
+def get_dataset(name, batch_size, test_batch=10000, embedding=False, return_idx=False):
 
     if name == 'mnist':
         transform = transforms.Compose([
@@ -121,13 +121,13 @@ def get_dataset(name, batch_size, embedding=False, return_idx=False):
             dataset = BinaryDataset(name, transform=transforms.Normalize([127.5, 127.5, 127.5], [127.5, 127.5, 127.5]), return_idx=return_idx)
             dataset_size = dataset.__len__()
         R = torch.randperm(dataset_size)
-        train_indices = torch.utils.data.SubsetRandomSampler(R[10000:])
-        test_indices = torch.utils.data.SubsetRandomSampler(R[:10000])
+        train_indices = torch.utils.data.SubsetRandomSampler(R[test_batch:])
+        test_indices = torch.utils.data.SubsetRandomSampler(R[:test_batch])
         trainloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_indices)
         testloader = torch.utils.data.DataLoader(dataset, batch_size=100, sampler=test_indices)
         num_of_classes = 1
-        train_size = dataset_size-10000
-        test_size = 10000
+        train_size = dataset_size-test_batch
+        test_size = test_batch
     
     if embedding:
         return trainloader, testloader, train_size, test_size, num_of_classes, mu, std
