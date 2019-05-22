@@ -31,7 +31,7 @@ torch.random.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
 ### LOAD THE DATA SET ###
-trainloader, testloader, train_size, test_size, num_of_classes = dataset.get_dataset(args.dataset, args.z_batch)
+trainloader, testloader, train_size, test_size, num_of_classes = dataset.get_dataset(args.dataset, args.z_batch, test_batch=args.test_batch)
 
 dummy = iter(trainloader).next()[0]
 num_of_channels = dummy.shape[1]
