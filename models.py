@@ -347,6 +347,12 @@ class SoftTree(torch.nn.Module):
             self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*self.leaf_count, in_features), nonlinearity='linear')
             self.pw = torch.nn.Parameter(self.pw.view(out_features, self.leaf_count, in_features).permute(0, 2, 1))
             self.pb = torch.nn.Parameter(torch.zeros(out_features, self.leaf_count))
+        elif self.proj == 'linear2':
+            self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*self.leaf_count, in_features), nonlinearity='linear')
+            # [leaf, in, out]
+            self.pw = torch.nn.Parameter(self.pw.view(out_features, self.leaf_count, in_features).permute(1, 2, 0))
+            # [leaf, 1, out]
+            self.pb = torch.nn.Parameter(torch.zeros(self.leaf_count, 1, out_features))
         elif self.proj == 'constant':
             # find a better init for this.
             self.z = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
@@ -386,6 +392,11 @@ class SoftTree(torch.nn.Module):
             gated_projection = torch.matmul(self.pw,leaf_probs).permute(2,0,1)
             gated_bias = torch.matmul(self.pb,leaf_probs).permute(1,0)
             result = torch.matmul(gated_projection,x.view(-1,self.in_features,1))[:,:,0] + gated_bias
+        elif self.proj == 'linear2':
+            # input = [1, batch, dim]
+            x = x.view(1, x.shape[0], x.shape[1])
+            out = torch.matmul(x, self.pw)+self.pb
+            result = (out, leaf_probs)
         elif self.proj == 'constant':
             result = torch.matmul(self.z,leaf_probs).permute(1,0)
         elif self.proj == 'gmm':
