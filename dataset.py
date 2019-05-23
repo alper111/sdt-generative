@@ -71,7 +71,7 @@ def get_dataset(name, batch_size, test_batch=10000, embedding=False, return_idx=
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 112800
         test_size = 10000
-        num_of_classes = trainset.targets.max().item()+1
+        num_of_classes = 47
     elif name == 'fashion':
         transform = transforms.Compose([
             transforms.Resize((32, 32)),
@@ -83,7 +83,7 @@ def get_dataset(name, batch_size, test_batch=10000, embedding=False, return_idx=
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 60000
         test_size = 10000
-        num_of_classes = trainset.targets.max().item()+1
+        num_of_classes = 10
     elif name == 'cifar':
         transform = transforms.Compose([
             transforms.ToTensor(),
@@ -94,7 +94,7 @@ def get_dataset(name, batch_size, test_batch=10000, embedding=False, return_idx=
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 50000
         test_size = 10000
-        num_of_classes = trainset.targets.max().item()+1
+        num_of_classes = 10
     elif name == 'stl':
         transform = transforms.Compose([
             transforms.ToTensor(),
@@ -105,7 +105,7 @@ def get_dataset(name, batch_size, test_batch=10000, embedding=False, return_idx=
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, num_workers=4)
         train_size = 5000
         test_size = 8000
-        num_of_classes = trainset.targets.max().item()+1
+        num_of_classes = 10
     else:
         if embedding:
             X = torch.load(name)
