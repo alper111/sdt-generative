@@ -417,6 +417,11 @@ class SoftTree(torch.nn.Module):
                 current_right = torch.mul(parent_gating, 1-gatings[:, i]).view(-1, 1)
                 node_densities = torch.cat([node_densities, current_left, current_right], dim=1)
         return node_densities
+    
+    def gatings(self, x):
+        with torch.no_grad():
+            gatings = torch.sigmoid(torch.add(torch.matmul(x,self.gw),self.gb))
+        return gatings
 
 class MixtureDecoder(torch.nn.Module):
     def __init__(self, channels, input_shape, latent_dim, mixture, depth, projection='constant', activation=torch.nn.ReLU(), dropout=0.0, std=None, normalization=None):
