@@ -74,6 +74,25 @@ def gradient_norm_penalty(x, func, c=1, k=1):
     gradient_penalty = ((gradients.norm(2, dim=1)-c)**2).mean()*k
     return gradient_penalty
 
+def one_way_gradient_penalty(D, x_true, x_fake, derivative, device):
+    if len(x_true.shape) == 2:
+        alpha = torch.rand(x_true.size()[0],1,device=device)
+    else:
+        alpha = torch.rand(x_true.size()[0],1,1,1,device=device)
+
+    alpha = alpha.expand(x_true.size())    
+    interpolates = alpha * x_true + (1-alpha) * x_fake
+    interpolates = torch.autograd.Variable(interpolates,requires_grad=True)
+    disc_interpolates = D(interpolates)
+    gradients = torch.autograd.grad(outputs=disc_interpolates,
+                                    inputs=interpolates,
+                                    grad_outputs=torch.ones(disc_interpolates.size(),device=device),
+                                    create_graph=True,
+                                    retain_graph=True,
+                                    only_inputs=True)[0]
+    gradient_penalty = (torch.relu(gradients.norm(2,dim=1)-derivative) ** 2).mean() * 10
+    return gradient_penalty
+
 # given first value, last value and epoch, computes the decay factor
 def exp_decay_rate(first, last, epoch):
     return np.exp(1/epoch * np.log(last/first))
