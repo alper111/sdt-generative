@@ -82,7 +82,8 @@ else:
             normalization=args.g_norm,
             mixture=args.g_model,
             depth=args.g_depth,
-            projection=args.g_proj
+            projection=args.g_proj,
+            dropout=args.g_drop
             ),
         torch.nn.Tanh()
     )
