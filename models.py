@@ -499,6 +499,9 @@ class MoE(torch.nn.Module):
             torch.nn.init.xavier_normal_(
                 torch.empty(in_features, num_leafs)))
         self.gb = torch.nn.Parameter(torch.zeros(num_leafs))
+        # dropout rate for gating weights.
+        # see: Ahmetoglu et al. 2018 https://doi.org/10.1007/978-3-030-01418-6_14
+        self.drop = torch.nn.Dropout(p=dropout)
         if self.proj == 'linear':
             self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*num_leafs, in_features), nonlinearity='linear')
             self.pw = torch.nn.Parameter(self.pw.view(out_features, num_leafs, in_features).permute(0, 2, 1))
@@ -511,7 +514,8 @@ class MoE(torch.nn.Module):
             self.std = torch.nn.Parameter(torch.randn(out_features, num_leafs))
         
     def forward(self, x):
-        gatings = torch.softmax(torch.add(torch.matmul(x,self.gw),self.gb), dim=1).t()
+        gw_ = self.drop(self.gw)
+        gatings = torch.softmax(torch.add(torch.matmul(x,gw_),self.gb), dim=1).t()
         if self.proj == 'linear':
             gated_projection = torch.matmul(self.pw, gatings).permute(2,0,1)
             gated_bias = torch.matmul(self.pb, gatings).permute(1,0)
