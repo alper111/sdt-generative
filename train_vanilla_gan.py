@@ -1,4 +1,4 @@
-import args
+import argparse
 import os
 import numpy as np
 import torch
@@ -10,28 +10,65 @@ import utils
 import time
 import dataset
 import matplotlib as mpl
-if os.environ.get('DISPLAY','') == '':
-    print('no display found. Using non-interactive Agg backend')
-    mpl.use('Agg')
+if os.environ.get("DISPLAY","") == "":
+    print("no display found. Using non-interactive Agg backend")
+    mpl.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from tqdm import tqdm
-from shutil import copyfile
 
+parser = argparse.ArgumentParser(description="Train a GAN.")
+parser.add_argument("-g_model", help="generator model. mlp, tree or moe", type=str, required=True)
+parser.add_argument("-g_layers", help="generator layer info", nargs="+", type=int, required=True)
+parser.add_argument("-g_depth", help="generator tree depth", type=int)
+parser.add_argument("-g_proj", help="generator leaf projection. default constant", type=str, default="constant")
+parser.add_argument("-g_norm", help="generator normalization layer. batch_norm, layer_norm", type=str, default=None)
+parser.add_argument("-g_drop", help="dropout rate for gatings. default 0.", type=float, default=0.0)
+parser.add_argument("-d_model", help="discriminator model. mlp or conv", type=str, required=True)
+parser.add_argument("-d_layers", help="discriminator layer info", nargs="+", type=int, required=True)
+parser.add_argument("-d_depth", help="discriminator tree depth", type=int)
+parser.add_argument("-d_proj", help="discriminator leaf projection. default constant", type=str, default="constant")
+parser.add_argument("-d_norm", help="discriminator normalization layer. batch_norm, layer_norm", type=str, default=None)
+parser.add_argument("-input_shape", help="if you use conv generator, this is the dimension from which gen starts deconving.", nargs="+", type=int)
+parser.add_argument("-z_dim", help="dimensionality of z. default 100.", default=100, type=int)
+parser.add_argument("-batch_size", help="batch size. default 128.", default=128, type=int)
+parser.add_argument("-test_size", help="number of test samples. default 10000", default=10000, type=int)
+parser.add_argument("-lr", help="learning rate. default 1e-4.", default=1e-4, type=float)
+parser.add_argument("-lr_decay", help="decay rate of learning rate. default 1.", default=1.0, type=float)
+parser.add_argument("-lr_step", help="decay step size. default 1.", default=1, type=int)
+parser.add_argument("-wasserstein", help="whether to use Wasserstein GP loss or not. default 0", default=0, type=int)
+parser.add_argument("-epoch", default=50, type=int)
+parser.add_argument("-out", help="output folder.", type=str, required=True)
+parser.add_argument("-seed", help="seed. default 2019.", default=2019, type=int)
+parser.add_argument("-device", help="default cpu", default="cpu", type=str)
+parser.add_argument("-dataset", default="mnist", type=str)
+parser.add_argument("-c_iter", help="number of times the discriminator is trained. default 1.", type=int, default=1)
+parser.add_argument("-topk", default=1, help="k-nn accuracy. default 1", type=int)
+parser.add_argument("-acc", default=0, type=int)
+parser.add_argument("-ckpt", help="checkpoint", type=str, default=None)
+
+args = parser.parse_args()
+
+WASSERSTEIN = True if args.wasserstein == 1 else False
+ACC = True if args.acc == 1 else False
 DEVICE = torch.device(args.device)
-os.system('cat args.py')
-
-if not os.path.exists(args.out):
-    os.makedirs(args.out)
-opts = os.path.join(args.out, 'args.txt')
-copyfile('args.py', opts)
 
 np.random.seed(args.seed)
 torch.random.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
 ### LOAD THE DATA SET ###
-trainloader, testloader, train_size, test_size, num_of_classes = dataset.get_dataset(args.dataset, args.z_batch, test_batch=args.test_batch)
+trainloader, testloader, train_size, test_size, num_of_classes = dataset.get_dataset(args.dataset, args.batch_size, test_batch=args.test_size)
+
+if not os.path.exists(args.out):
+    os.makedirs(args.out)
+os.chdir(args.out)
+arg_dict = vars(args)
+for key in arg_dict.keys():
+    print("%s: %s" % (key, arg_dict[key]))
+    print("%s: %s" % (key, arg_dict[key]), file=open("args.txt", "a"))
+print("date: %s" % time.asctime(time.localtime(time.time())))
+print("date: %s" % time.asctime(time.localtime(time.time())), file=(open("args.txt", "a")))
 
 dummy = iter(trainloader).next()[0]
 num_of_channels = dummy.shape[1]
@@ -39,7 +76,7 @@ height = dummy.shape[2]
 width = dummy.shape[3]
 img_size = height * width
 feature_size = num_of_channels * img_size
-loop_per_epoch = train_size // (args.z_batch * args.c_iter)
+loop_per_epoch = train_size // (args.batch_size * args.c_iter)
 total_loss = []
 real_acc_total = []
 fake_acc_total = []
@@ -50,7 +87,7 @@ gen_grads_total = []
 disc_grads_total = []
 
 # generator definition
-if args.g_model == 'mlp':
+if args.g_model == "mlp":
     generator = torch.nn.Sequential(
         models.MLP(
             layer_info=args.g_layers,
@@ -59,7 +96,7 @@ if args.g_model == 'mlp':
             normalization=args.g_norm),
         torch.nn.Tanh()
     )
-elif args.g_model == 'conv':
+elif args.g_model == "conv":
     generator = torch.nn.Sequential(
         models.ConvDecoder(
             channels=args.g_layers,
@@ -88,13 +125,13 @@ else:
         torch.nn.Tanh()
     )
 # discriminator definition
-if args.d_model == 'mlp':
+if args.d_model == "mlp":
     discriminator = models.MLP(
         layer_info=args.d_layers,
-        activation=eval(args.activation),
+        activation=torch.nn.ReLU(),
         std=None,
         normalization=args.d_norm)
-elif args.d_model == 'conv':
+elif args.d_model == "conv":
     discriminator = models.ConvEncoder(
         channels=args.d_layers,
         input_shape=[num_of_channels, height, width],
@@ -117,8 +154,8 @@ else:
         
 if args.ckpt is not None:
     print("using checkpoint...")
-    generator.load_state_dict(torch.load(os.path.join(args.ckpt, 'gen.ckpt')))
-    discriminator.load_state_dict(torch.load(os.path.join(args.ckpt, 'disc.ckpt')))
+    generator.load_state_dict(torch.load(os.path.join(args.ckpt, "gen.ckpt")))
+    discriminator.load_state_dict(torch.load(os.path.join(args.ckpt, "disc.ckpt")))
 generator = generator.to(DEVICE)
 discriminator = discriminator.to(DEVICE)
 
@@ -151,7 +188,7 @@ for p in discriminator.parameters():
         n *= d
     disc_dim_normalizer.append(n**0.5)
 
-if args.acc:
+if ACC:
     ### load inception module
     inception = models.InceptionV3()
     for p in inception.parameters():
@@ -186,26 +223,26 @@ for e in range(args.epoch):
             x_real, _ = iterator.next()
             x_real = x_real.to(DEVICE)
 
-            if args.d_model == 'mlp':
+            if args.d_model == "mlp":
                 x_real = x_real.view(-1,feature_size)
             d_real = discriminator(x_real)
-            if args.wasserstein:
+            if WASSERSTEIN:
                 d_real_loss = -d_real.mean()
             else:
                 d_real_loss = criterion(d_real,torch.ones_like(d_real,device=DEVICE))
             # train discriminator with fake data
-            x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
-            if args.d_model == 'mlp':
+            x_fake = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
+            if args.d_model == "mlp":
                 x_fake = x_fake.view(-1,feature_size)
             d_fake = discriminator(x_fake)
-            if args.wasserstein:
+            if WASSERSTEIN:
                 d_fake_loss = d_fake.mean()
             else:
                 d_fake_loss = criterion(d_fake,torch.zeros_like(d_fake,device=DEVICE))
             
             d_loss = d_real_loss + d_fake_loss
-            if args.wasserstein:
-                d_loss += utils.gradient_penalty(discriminator,x_real, x_fake, 1.0, DEVICE)
+            if WASSERSTEIN:
+                d_loss += utils.gradient_penalty(discriminator, x_real, x_fake, 1.0, DEVICE)
             d_loss.backward()
             optimD.step()
             disc_avg_loss += d_loss.item()
@@ -217,11 +254,11 @@ for e in range(args.epoch):
         for p in discriminator.parameters():
             p.requires_grad = False
         optimG.zero_grad()
-        x_fake = generator(torch.randn(args.z_batch, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
-        if args.d_model == 'mlp':
-            x_fake = x_fake.view(-1,feature_size)
+        x_fake = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE)).view(-1, num_of_channels, height, width)
+        if args.d_model == "mlp":
+            x_fake = x_fake.view(-1, feature_size)
         g_loss = discriminator(x_fake)
-        if args.wasserstein:
+        if WASSERSTEIN:
             g_loss = -g_loss.mean()
         else:
             g_loss = criterion(g_loss,torch.ones_like(g_loss,device=DEVICE))
@@ -263,21 +300,21 @@ for e in range(args.epoch):
     generator.eval()
     discriminator.eval()
     samples = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
-    if args.g_model == 'mlp':
+    if args.g_model == "mlp":
         samples = samples.view(-1, num_of_channels, height, width)
-    torchvision.utils.save_image(samples, args.out+'gan_{0}.png'.format(e+1), nrow=10)
+    torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
 
     # 1-nn accuracy
     if (e+1) % 5 == 0:
         print("calculating nn accuracy...")
         fake_samples = torch.empty(test_size, num_of_channels, height, width)
-        if args.acc:
+        if ACC:
             fake_feats = torch.empty(test_size, 2048)
         for xx in range(test_size // 100):
             fake_samples[xx*100:(xx+1)*100] = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach().view(-1, num_of_channels, height, width)*0.5+0.5
-            if args.acc:
+            if ACC:
                 fake_feats[xx*100:(xx+1)*100] = inception(fake_samples[xx*100:(xx+1)*100].to(DEVICE)).cpu()
-        if args.acc:
+        if ACC:
             fid = utils.FID_score(x_real=real_feats, x_fake=fake_feats)
             fake_acc, real_acc = utils.nn_accuracy(p_fake=fake_feats.to(DEVICE), p_real=real_feats.to(DEVICE), device=DEVICE, k=args.topk)
         else:
@@ -291,15 +328,15 @@ for e in range(args.epoch):
         fid_total.append(fid)
 
         # saving statistics
-        np.save(args.out+"fa.npy", fake_acc_total)
-        np.save(args.out+"ra.npy", real_acc_total)
-        np.save(args.out+"genloss.npy", gen_loss_total)
-        np.save(args.out+"discloss.npy", disc_loss_total)
-        np.save(args.out+"fre.npy", fid_total)
-        np.save(args.out+"disc_grads.npy", disc_grads_total)
-        np.save(args.out+"gen_grads.npy", gen_grads_total)
-        torch.save(generator.cpu().state_dict(), args.out+'gen.ckpt')
-        torch.save(discriminator.cpu().state_dict(), args.out+'disc.ckpt')
+        np.save("fa.npy", fake_acc_total)
+        np.save("ra.npy", real_acc_total)
+        np.save("genloss.npy", gen_loss_total)
+        np.save("discloss.npy", disc_loss_total)
+        np.save("fre.npy", fid_total)
+        np.save("disc_grads.npy", disc_grads_total)
+        np.save("gen_grads.npy", gen_grads_total)
+        torch.save(generator.cpu().state_dict(), "gen.ckpt")
+        torch.save(discriminator.cpu().state_dict(), "disc.ckpt")
         generator.to(DEVICE)
         discriminator.to(DEVICE)
     generator.train()
@@ -307,14 +344,14 @@ for e in range(args.epoch):
 
 generator.eval()
 discriminator.eval()
-torch.save(generator.cpu().state_dict(),args.out+'gen.ckpt')
-torch.save(discriminator.cpu().state_dict(),args.out+'disc.ckpt')
+torch.save(generator.cpu().state_dict(),"gen.ckpt")
+torch.save(discriminator.cpu().state_dict(),"disc.ckpt")
 
 plt.plot(fake_acc_total)
 plt.plot(real_acc_total)
-plt.plot((np.array(fake_acc_total)+np.array(real_acc_total))*0.5,'--')
+plt.plot((np.array(fake_acc_total)+np.array(real_acc_total))*0.5,"--")
 plt.legend(["fake acc.", "real acc.","total acc."])
-pp = PdfPages(args.out+'accuracy.pdf')
+pp = PdfPages("accuracy.pdf")
 pp.savefig()
 pp.close()
 plt.close()
@@ -322,13 +359,13 @@ plt.close()
 plt.plot(disc_loss_total)
 plt.plot(gen_loss_total)
 plt.legend(["disc. loss", "gen. loss"])
-pp = PdfPages(args.out+'loss.pdf')
+pp = PdfPages("loss.pdf")
 pp.savefig()
 pp.close()
 plt.close()
 
 plt.plot(fid_total)
-pp = PdfPages(args.out+'fid.pdf')
+pp = PdfPages("fid.pdf")
 pp.savefig()
 pp.close()
 plt.close()
