@@ -46,7 +46,7 @@ parser.add_argument("-c_iter", help="number of times the discriminator is traine
 parser.add_argument("-topk", default=1, help="k-nn accuracy. default 1", type=int)
 parser.add_argument("-acc", default=0, type=int)
 parser.add_argument("-ckpt", help="checkpoint", type=str, default=None)
-parser.add_argument("-test_step", help="test step", type=float, default=5)
+parser.add_argument("-test_step", help="test step", type=int, default=5)
 
 args = parser.parse_args()
 
