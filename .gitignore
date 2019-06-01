@@ -6,4 +6,4 @@ save/
 out/
 *.ipynb
 *.npy
-args.py
+run.sh
