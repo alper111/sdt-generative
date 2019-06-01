@@ -46,6 +46,7 @@ parser.add_argument("-c_iter", help="number of times the discriminator is traine
 parser.add_argument("-topk", default=1, help="k-nn accuracy. default 1", type=int)
 parser.add_argument("-acc", default=0, type=int)
 parser.add_argument("-ckpt", help="checkpoint", type=str, default=None)
+parser.add_argument("-test_step", help="test step", type=float, default=5)
 
 args = parser.parse_args()
 
@@ -305,7 +306,7 @@ for e in range(args.epoch):
     torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
 
     # 1-nn accuracy
-    if (e+1) % 5 == 0:
+    if (e+1) % args.test_step == 0:
         print("calculating nn accuracy...")
         fake_samples = torch.empty(test_size, num_of_channels, height, width)
         if ACC:
