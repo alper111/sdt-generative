@@ -538,6 +538,38 @@ class MoE(torch.nn.Module):
             self.num_leafs,
             self.proj)
 
+class MADGAN(torch.nn.Module):
+    def __init__(self, num_of_generators, channels, input_shape, latent_dim, std=None, normalization=None):
+        super(MADGAN, self).__init__()
+        self.num_of_generators = num_of_generators
+        self.normalization = normalization
+        self.shared_block = [ConvDecoder(
+            channels=channels[:-1],
+            input_shape=input_shape,
+            latent_dim=latent_dim,
+            std=std,
+            normalization=normalization
+        )]
+        if normalization == 'batch_norm':
+            self.shared_block.append(torch.nn.BatchNorm2d(channels[-2]))
+        elif normalization == 'layer_norm':
+            multiplier = len(channels)-1
+            self.shared_block.append(torch.nn.LayerNorm([input_shape[0] // multiplier, input_shape[1] * multiplier, input_shape[2] * multiplier]))
+        self.shared_block.append(torch.nn.ReLU())
+        self.shared_block = torch.nn.Sequential(*self.shared_block)
+
+        self.generators = []
+        for i in range(num_of_generators):
+            self.generators.append(ConvTranspose2d(in_channels=channels[-2], out_channels=channels[-1], kernel_size=4, stride=2, padding=1, std=std))
+        self.generators = torch.nn.ModuleList(self.generators)
+
+    def forward(self, x):
+        h = self.shared_block(x)
+        outs = []
+        for i in range(self.num_of_generators):
+            outs.append(self.generators[i](h))
+        return torch.cat(outs, dim=0)
+
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):
     def __init__(self):
