@@ -47,6 +47,7 @@ parser.add_argument("-topk", default=1, help="k-nn accuracy. default 1", type=in
 parser.add_argument("-acc", default=0, type=int)
 parser.add_argument("-ckpt", help="checkpoint", type=str, default=None)
 parser.add_argument("-test_step", help="test step", type=int, default=5)
+parser.add_argument("-img_step", help="when to print", type=int, default=1)
 
 args = parser.parse_args()
 
