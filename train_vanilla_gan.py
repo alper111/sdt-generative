@@ -299,15 +299,18 @@ for e in range(args.epoch):
         finish = time.asctime(time.localtime(time.time()+eta))
         print("### set your alarm at:",finish,"###")
 
-    generator.eval()
-    discriminator.eval()
-    samples = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
-    if args.g_model == "mlp":
-        samples = samples.view(-1, num_of_channels, height, width)
-    torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
+    if (e+1) % args.img_step == 0:
+        generator.eval()
+        samples = generator(torch.randn(100, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
+        if args.g_model == "mlp":
+            samples = samples.view(-1, num_of_channels, height, width)
+        torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
+        generator.train()
 
     # 1-nn accuracy
     if (e+1) % args.test_step == 0:
+        generator.eval()
+        discriminator.eval()
         print("calculating nn accuracy...")
         fake_samples = torch.empty(test_size, num_of_channels, height, width)
         if ACC:
@@ -341,8 +344,8 @@ for e in range(args.epoch):
         torch.save(discriminator.cpu().state_dict(), "disc.ckpt")
         generator.to(DEVICE)
         discriminator.to(DEVICE)
-    generator.train()
-    discriminator.train()
+        generator.train()
+        discriminator.train()
 
 generator.eval()
 discriminator.eval()
