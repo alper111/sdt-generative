@@ -18,9 +18,11 @@ from matplotlib.backends.backend_pdf import PdfPages
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description="Train a GAN.")
+parser.add_argument("-g_model", help="generator model. mlp, tree or moe", type=str, required=True)
 parser.add_argument("-g_layers", help="generator layer info", nargs="+", type=int, required=True)
 parser.add_argument("-g_num", help="number of generators", type=int)
 parser.add_argument("-g_norm", help="generator normalization layer. batch_norm, layer_norm", type=str, default=None)
+parser.add_argument("-d_model", help="discriminator model. mlp or conv", type=str, required=True)
 parser.add_argument("-d_layers", help="discriminator layer info", nargs="+", type=int, required=True)
 parser.add_argument("-d_norm", help="discriminator normalization layer. batch_norm, layer_norm", type=str, default=None)
 parser.add_argument("-input_shape", help="if you use conv generator, this is the dimension from which gen starts deconving.", nargs="+", type=int)
@@ -82,26 +84,32 @@ gen_grads_total = []
 disc_grads_total = []
 
 # generator definition
-generator = torch.nn.Sequential(
-    models.MADGAN(
-        num_of_generators=args.g_num,
-        channels=args.g_layers,
-        input_shape=args.input_shape,
-        latent_dim=args.z_dim,
-        std=0.02,
-        normalization=args.g_norm
-    ),
-    torch.nn.Tanh()
+if args.g_model == 'mlp':
+    print("not implemented")
+else:
+    generator = torch.nn.Sequential(
+        models.MADGAN(
+            num_of_generators=args.g_num,
+            channels=args.g_layers,
+            input_shape=args.input_shape,
+            latent_dim=args.z_dim,
+            std=0.02,
+            normalization=args.g_norm
+        ),
+        torch.nn.Tanh()
 )
 # discriminator definition
-discriminator = models.ConvEncoder(
-    channels=args.d_layers,
-    input_shape=[num_of_channels, height, width],
-    latent_dim=args.g_num+1,
-    activation=torch.nn.LeakyReLU(0.2),
-    std=0.02,
-    normalization=args.d_norm
-)
+if args.d_model == 'mlp':
+    print("not implemented")
+else:
+    discriminator = models.ConvEncoder(
+        channels=args.d_layers,
+        input_shape=[num_of_channels, height, width],
+        latent_dim=args.g_num+1,
+        activation=torch.nn.LeakyReLU(0.2),
+        std=0.02,
+        normalization=args.d_norm
+    )
 
 if args.ckpt is not None:
     print("using checkpoint...")
@@ -110,11 +118,12 @@ if args.ckpt is not None:
 generator = generator.to(DEVICE)
 discriminator = discriminator.to(DEVICE)
 
-optimG = torch.optim.Adam(lr=args.lr,params=generator.parameters(), betas=(0.5, 0.999), amsgrad=True)
-optimD = torch.optim.Adam(lr=args.lr,params=discriminator.parameters(), betas=(0.5, 0.999), amsgrad=True)
+optimG = torch.optim.Adam(lr=args.lr, params=generator.parameters(), betas=(0.5, 0.999), amsgrad=True)
+optimD = torch.optim.Adam(lr=args.lr, params=discriminator.parameters(), betas=(0.5, 0.999), amsgrad=True)
 schedulerG = torch.optim.lr_scheduler.StepLR(optimizer=optimG, gamma=args.lr_decay, step_size=args.lr_step)
 schedulerD = torch.optim.lr_scheduler.StepLR(optimizer=optimD, gamma=args.lr_decay, step_size=args.lr_step)
-criterion = torch.nn.CrossEntropyLoss()
+ce_with_logits = torch.nn.CrossEntropyLoss()
+bce_with_logits = torch.nn.BCEWithLogitsLoss()
 print("GENERATOR")
 print(generator)
 print("DISCRIMINATOR")
@@ -181,7 +190,7 @@ for e in range(args.epoch):
                 print("not implemented")
                 # d_real_loss = -d_real.mean()
             else:
-                d_real_loss = criterion(d_real,torch.zeros_like(d_real,device=DEVICE))
+                d_real_loss = ce_with_logits(d_real, torch.zeros(args.batch_size, device=DEVICE, dtype=torch.int64))
             # train discriminator with fake data
             x_fake = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
             if args.d_model == "mlp":
@@ -191,9 +200,9 @@ for e in range(args.epoch):
                 print("not implemented")
                 # d_fake_loss = d_fake.mean()
             else:
-                labels = torch.arange(args.g_num, device=DEVICE)+1
+                labels = torch.arange(args.g_num, device=DEVICE, dtype=torch.int64)+1
                 labels = labels.repeat_interleave(args.batch_size)
-                d_fake_loss = criterion(d_fake, labels)
+                d_fake_loss = ce_with_logits(d_fake, labels)
 
             d_loss = d_real_loss + d_fake_loss
             if WASSERSTEIN:
@@ -213,12 +222,13 @@ for e in range(args.epoch):
         x_fake = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE)).view(-1, num_of_channels, height, width)
         if args.d_model == "mlp":
             x_fake = x_fake.view(-1, feature_size)
-        g_loss = discriminator(x_fake)
+        g_loss = discriminator(x_fake)[:, 0]
         if WASSERSTEIN:
             print("not implemented")
             # g_loss = -g_loss.mean()
         else:
-            g_loss = criterion(g_loss,torch.zeros_like(g_loss,device=DEVICE))
+            g_loss = -bce_with_logits(g_loss, torch.zeros(args.batch_size * args.g_num, device=DEVICE, dtype=torch.float))
+            # g_loss = bce_with_logits(g_loss, torch.ones(args.batch_size * args.g_num, device=DEVICE, dtype=torch.float))
         g_loss.backward()
         optimG.step()
         gen_avg_loss += g_loss.item()
