@@ -364,30 +364,21 @@ class SoftTree(torch.nn.Module):
         gw_ = self.drop(self.gw)
         gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
         leaf_probs = None
-        for i in range(self.leaf_count):
-            gateways = numpy.binary_repr(i,width=self.depth)
-            index = 1
-            probs = None
-            for j in range(self.depth):
-                if j == 0:
-                    if gateways[j] == '0':
-                        probs = gatings[:,index-1]
-                        index = 2 * index
-                    else:
-                        probs = 1-gatings[:,index-1]
-                        index = 2 * index + 1
+        node_densities = torch.ones(x.shape[0], 2**(self.depth+1)-1, device=x.device)
+        it = 1
+        for d in range(1, self.depth+1):
+            for i in range(2**d):
+                parent_index = (it+1) // 2 - 1
+                child_way = (it+1) % 2
+                if child_way == 0:
+                    parent_gating = gatings[:, parent_index]
                 else:
-                    if gateways[j] == '0':
-                        probs = probs * gatings[:,index-1]
-                        index = 2 * index
-                    else:
-                        probs = probs * (1-gatings[:,index-1])
-                        index = 2 * index + 1
-            if i == 0:
-                leaf_probs = probs
-            else:
-                leaf_probs = torch.cat([leaf_probs,probs],dim=0)
-        leaf_probs = leaf_probs.view(self.leaf_count,-1)
+                    parent_gating = 1 - gatings[:, parent_index]
+                parent_density = node_densities[:, parent_index].clone()
+                node_densities[:, it] = (parent_density * parent_gating)
+                it += 1
+        leaf_probs = node_densities[:, -self.leaf_count:].t()
+
         if self.proj == 'linear':
             gated_projection = torch.matmul(self.pw,leaf_probs).permute(2,0,1)
             gated_bias = torch.matmul(self.pb,leaf_probs).permute(1,0)
@@ -419,14 +410,19 @@ class SoftTree(torch.nn.Module):
         with torch.no_grad():
             gw_ = self.drop(self.gw)
             gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
-            node_densities = gatings[:,0].view(-1, 1)
-            node_densities = torch.cat([node_densities, (1-gatings[:,0]).view(-1, 1)], dim=1)
-            for i in range(1, self.gate_count):
-                parent = i - 1
-                parent_gating = node_densities[:, parent]
-                current_left = torch.mul(parent_gating, gatings[:, i]).view(-1, 1)
-                current_right = torch.mul(parent_gating, 1-gatings[:, i]).view(-1, 1)
-                node_densities = torch.cat([node_densities, current_left, current_right], dim=1)
+            node_densities = torch.ones(x.shape[0], 2**(self.depth+1)-1, device=x.device)
+            it = 1
+            for d in range(1, self.depth+1):
+                for i in range(2**d):
+                    parent_index = (it+1) // 2 - 1
+                    child_way = (it+1) % 2
+                    if child_way == 0:
+                        parent_gating = gatings[:, parent_index]
+                    else:
+                        parent_gating = 1 - gatings[:, parent_index]
+                    parent_density = node_densities[:, parent_index]
+                    node_densities[:, it] = (parent_density * parent_gating)
+                    it += 1
         return node_densities
     
     def gatings(self, x):
