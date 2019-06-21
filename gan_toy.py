@@ -79,7 +79,7 @@ z = torch.randn(NUM_OF_POINTS, 2, device=device)
 # generator = models.SoftTree(in_features=2, out_features=2, depth=5, projection='linear')
 # discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
 generator = models.MLP(layer_info=[2, 400, 400, 400, 400, 2], activation=torch.nn.ReLU(), normalization=None)
-discriminator = models.MLP(layer_info=[2, 400, 400, 400, 400, 1], activation=torch.nn.ReLU(), normalization="layer_norm")
+discriminator = models.MLP(layer_info=[2, 400, 400, 400, 400, 1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
 discriminator.to(device)
@@ -102,11 +102,18 @@ critic_iter = args.c_iter
 loop_per_epoch = size // (BATCH_SIZE * critic_iter)
 total_loss = torch.zeros(NUM_OF_EPOCHS)
 timesteps = []
+d_fields = []
 real_total = []
 fake_total = []
 fid_total = []
 disc_total = []
 gen_total = []
+
+##
+# stuff for animation
+xv, yv = torch.meshgrid(torch.linspace(-30, 30, 40), torch.linspace(-30, 30, 40))
+field = torch.stack([xv.contiguous().view(-1), yv.contiguous().view(-1)], dim=1).to(device)
+##
 
 for e in range(NUM_OF_EPOCHS):
 
@@ -177,7 +184,12 @@ for e in range(NUM_OF_EPOCHS):
     
     if (e+1) % args.c_iter == 0:
         generator.eval()
+        discriminator.eval()
         with torch.no_grad():
+            ff = discriminator(field)
+            ff = torch.sigmoid(ff).cpu().numpy()
+            indexes = (ff*100).astype(np.int32).reshape(-1)
+            d_fields.append(indexes)
             data = np.zeros((size * 2,2))
             data[:size] = x.cpu()
             data[size:] = generator(z).cpu().numpy()
@@ -189,6 +201,7 @@ for e in range(NUM_OF_EPOCHS):
             fake_total.append(fake_acc)
             real_total.append(real_acc)
             fid_total.append(fid)
+        discriminator.train()
         generator.train()
 
 plt.plot(fake_total)
@@ -222,4 +235,10 @@ np.save(out_directory+"real.npy", real_total)
 np.save(out_directory+"g_loss.npy", gen_total)
 np.save(out_directory+"d_loss.npy", disc_total)
 
-utils.save_animation(name=out_directory+'animation.mp4',timesteps=timesteps, z=z.cpu(), x=x.cpu(), lims=(-15, 15), title=args.title, alpha=0.1)
+utils.save_animation_withdisc(
+    name=out_directory+'animation.mp4',
+    timesteps=timesteps,
+    d_field=d_fields,
+    lims=(-15, 15),
+    title=args.title,
+    alpha=0.5)
