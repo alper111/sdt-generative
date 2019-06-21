@@ -78,8 +78,8 @@ z = torch.randn(NUM_OF_POINTS, 2, device=device)
 
 # generator = models.SoftTree(in_features=2, out_features=2, depth=5, projection='linear')
 # discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
-generator = models.MLP(layer_info=[2, 400, 400, 400, 400, 2], activation=torch.nn.ReLU(), normalization=None)
-discriminator = models.MLP(layer_info=[2, 400, 400, 400, 400, 1], activation=torch.nn.ReLU(), normalization=None)
+generator = models.MLP(layer_info=[2, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
+discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
 discriminator.to(device)
@@ -234,6 +234,7 @@ np.save(out_directory+"fake.npy", fake_total)
 np.save(out_directory+"real.npy", real_total)
 np.save(out_directory+"g_loss.npy", gen_total)
 np.save(out_directory+"d_loss.npy", disc_total)
+np.save(out_directory+"timesteps.npy", timesteps)
 
 utils.save_animation_withdisc(
     name=out_directory+'animation.mp4',
