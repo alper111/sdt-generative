@@ -152,3 +152,46 @@ def save_animation(name, timesteps, z, x, lims, title, alpha=1.0, s=50):
     anim = animation.FuncAnimation(fig, animate, init_func=init,frames=len(timesteps), interval=20, blit=True)
     anim.save(name)
 
+def save_animation_withdisc(name, timesteps, d_field, lims, title, alpha=1.0, s=20):
+    size = 2500
+    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    ax.set_xlim(lims)
+    ax.set_ylim(lims)
+    ax.set_title(title)
+    canvas = ax.scatter([], [], alpha=alpha, s=s)
+
+    colormap = plt.get_cmap("rainbow",101)
+    colorlist = [colormap(i) for i in range(101)]
+    xv, yv = torch.meshgrid(torch.linspace(lims[0]-2, lims[1]+2, 40), torch.linspace(lims[0]-2, lims[1]+2, 40))
+    field = torch.stack([xv.contiguous().view(-1), yv.contiguous().view(-1)], dim=1).numpy()
+
+    colors = []
+    for i in range(1600+size*2):
+        if i < 1600:
+            colors.append(colorlist[50])
+        elif i < (1600+size):
+            colors.append('tab:blue')
+        else:
+            colors.append('tab:orange')
+
+    def init():
+        data = np.zeros((1600+2*size, 2))
+        data[:1600] = field
+        data[1600:] = timesteps[0]
+        canvas.set_offsets(data)
+        canvas.set_color(colors)
+        return (canvas,)
+
+    def animate(t):
+        data = canvas.get_offsets()
+        indexes = d_field[t]
+        for j in range(1600):
+            colors[j] = colorlist[indexes[j]]
+        data[1600:] = timesteps[t]
+        canvas.set_offsets(data)
+        canvas.set_color(colors)
+        return (canvas,)
+
+    anim = animation.FuncAnimation(fig, animate, init_func=init,frames=len(timesteps), interval=20, blit=True)
+    anim.save(name)
+
