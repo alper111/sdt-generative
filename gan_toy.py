@@ -76,28 +76,11 @@ x = x.to(device)
 
 z = torch.randn(NUM_OF_POINTS, 2, device=device)
 
-# generator = torch.nn.Sequential(
-#     models.Linear(2, 20, normalization=None, std=None),
-#     torch.nn.ReLU(),
-#     models.Linear(20, 20, normalization=None, std=None),
-#     torch.nn.ReLU(),
-#     models.Linear(20, 20, normalization=None, std=None),
-#     torch.nn.ReLU(),
-#     models.Linear(20, 2, std=None)
-# )
+# generator = models.SoftTree(in_features=2, out_features=2, depth=5, projection='linear')
+# discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
+generator = models.MLP(layer_info=[2, 400, 400, 400, 400, 2], activation=torch.nn.ReLU(), normalization=None)
+discriminator = models.MLP(layer_info=[2, 400, 400, 400, 400, 1], activation=torch.nn.ReLU(), normalization="layer_norm")
 
-# discriminator = torch.nn.Sequential(
-#     models.Linear(2, 20, normalization=None, std=None),
-#     torch.nn.LeakyReLU(0.2),
-#     models.Linear(20, 20, normalization=None, std=None),
-#     torch.nn.LeakyReLU(0.2),
-#     models.Linear(20, 20, normalization=None, std=None),
-#     torch.nn.LeakyReLU(0.2),
-#     models.Linear(20, 1, std=None)
-# )
-
-generator = models.SoftTree(in_features=2, out_features=2, depth=2, projection='gmm')
-discriminator = models.SoftTree(in_features=2, out_features=1, depth=2, projection='gmm')
 generator.to(device)
 discriminator.to(device)
 
@@ -178,7 +161,7 @@ for e in range(NUM_OF_EPOCHS):
         if WASSERSTEIN:
             g_loss = -g_loss.mean()
         else:
-            g_loss = criterion(g_loss,torch.ones_like(g_loss,device=device))
+            g_loss = criterion(g_loss,torch.ones_like(g_loss, device=device))
         g_loss.backward()
         optimG.step()
         gen_avg_loss += g_loss.item()
@@ -239,4 +222,4 @@ np.save(out_directory+"real.npy", real_total)
 np.save(out_directory+"g_loss.npy", gen_total)
 np.save(out_directory+"d_loss.npy", disc_total)
 
-utils.save_animation(name=out_directory+'animation.mp4',timesteps=timesteps,z=z.cpu(),x=x.cpu(),lims=(-15, 15),title=args.title,alpha=0.1)
+utils.save_animation(name=out_directory+'animation.mp4',timesteps=timesteps, z=z.cpu(), x=x.cpu(), lims=(-15, 15), title=args.title, alpha=0.1)
