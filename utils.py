@@ -162,7 +162,7 @@ def save_animation_withdisc(name, timesteps, d_field, lims, title, alpha=1.0, s=
 
     colormap = plt.get_cmap("rainbow",101)
     colorlist = [colormap(i) for i in range(101)]
-    xv, yv = torch.meshgrid(torch.linspace(lims[0]-2, lims[1]+2, 40), torch.linspace(lims[0]-2, lims[1]+2, 40))
+    xv, yv = torch.meshgrid(torch.linspace(lims[0], lims[1], 40), torch.linspace(lims[0], lims[1], 40))
     field = torch.stack([xv.contiguous().view(-1), yv.contiguous().view(-1)], dim=1).numpy()
 
     colors = []
