@@ -163,12 +163,12 @@ for e in range(NUM_OF_EPOCHS):
         optimG.zero_grad()
 
         x_fake = generator(torch.randn(args.batch_size, 2, device=device))
-        g_loss = discriminator(x_fake)
+        g_fake = discriminator(x_fake)
         # wasserstein
         if WASSERSTEIN:
-            g_loss = -g_loss.mean()
+            g_fake = -g_fake.mean()
         else:
-            g_loss = criterion(g_loss,torch.ones_like(g_loss, device=device))
+            g_loss = criterion(g_fake,torch.ones_like(g_fake, device=device))
         g_loss.backward()
         optimG.step()
         gen_avg_loss += g_loss.item()
