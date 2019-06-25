@@ -12,10 +12,9 @@ python3 -u train_madgan.py \
 -z_dim      100 \
 -batch_size 128 \
 -test_size  10000 \
--lr         2e-4 \
+-lr         1e-4 \
 -lr_decay   1.0 \
 -lr_step    1 \
--wasserstein 0 \
 -epoch      250 \
 -out        "out/MADGAN/test" \
 -seed       2019 \

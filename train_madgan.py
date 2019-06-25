@@ -32,7 +32,6 @@ parser.add_argument("-test_size", help="number of test samples. default 10000", 
 parser.add_argument("-lr", help="learning rate. default 1e-4.", default=1e-4, type=float)
 parser.add_argument("-lr_decay", help="decay rate of learning rate. default 1.", default=1.0, type=float)
 parser.add_argument("-lr_step", help="decay step size. default 1.", default=1, type=int)
-parser.add_argument("-wasserstein", help="whether to use Wasserstein GP loss or not. default 0", default=0, type=int)
 parser.add_argument("-epoch", default=50, type=int)
 parser.add_argument("-out", help="output folder.", type=str, required=True)
 parser.add_argument("-seed", help="seed. default 2019.", default=2019, type=int)
@@ -46,7 +45,6 @@ parser.add_argument("-test_step", help="test step", type=int, default=5)
 parser.add_argument("-img_step", help="when to print", type=int, default=1)
 
 args = parser.parse_args()
-WASSERSTEIN = True if args.wasserstein == 1 else False
 ACC = True if args.acc == 1 else False
 DEVICE = torch.device(args.device)
 
@@ -118,12 +116,12 @@ if args.ckpt is not None:
 generator = generator.to(DEVICE)
 discriminator = discriminator.to(DEVICE)
 
-optimG = torch.optim.Adam(lr=args.lr, params=generator.parameters(), betas=(0.5, 0.999), amsgrad=True)
+optimG = torch.optim.Adam(lr=args.lr * args.g_num, params=generator.parameters(), betas=(0.5, 0.999), amsgrad=True)
 optimD = torch.optim.Adam(lr=args.lr, params=discriminator.parameters(), betas=(0.5, 0.999), amsgrad=True)
 schedulerG = torch.optim.lr_scheduler.StepLR(optimizer=optimG, gamma=args.lr_decay, step_size=args.lr_step)
 schedulerD = torch.optim.lr_scheduler.StepLR(optimizer=optimD, gamma=args.lr_decay, step_size=args.lr_step)
 ce_with_logits = torch.nn.CrossEntropyLoss()
-bce_with_logits = torch.nn.BCEWithLogitsLoss()
+bce = torch.nn.BCELoss()
 print("GENERATOR")
 print(generator)
 print("DISCRIMINATOR")
@@ -186,28 +184,18 @@ for e in range(args.epoch):
             if args.d_model == "mlp":
                 x_real = x_real.view(-1,feature_size)
             d_real = discriminator(x_real)
-            if WASSERSTEIN:
-                print("not implemented")
-                # d_real_loss = -d_real.mean()
-            else:
-                d_real_loss = ce_with_logits(d_real, torch.zeros(args.batch_size, device=DEVICE, dtype=torch.int64))
+            d_real_loss = ce_with_logits(d_real, torch.zeros(args.batch_size, device=DEVICE, dtype=torch.int64))
+            
             # train discriminator with fake data
             x_fake = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE)).view(-1,num_of_channels,height,width)
             if args.d_model == "mlp":
                 x_fake = x_fake.view(-1,feature_size)
             d_fake = discriminator(x_fake)
-            if WASSERSTEIN:
-                print("not implemented")
-                # d_fake_loss = d_fake.mean()
-            else:
-                labels = torch.arange(args.g_num, device=DEVICE, dtype=torch.int64)+1
-                labels = labels.repeat_interleave(args.batch_size)
-                d_fake_loss = ce_with_logits(d_fake, labels)
+            labels = torch.arange(args.g_num, device=DEVICE, dtype=torch.int64)+1
+            labels = labels.repeat_interleave(args.batch_size)
+            d_fake_loss = ce_with_logits(d_fake, labels)
 
             d_loss = d_real_loss + d_fake_loss
-            if WASSERSTEIN:
-                print("not implemented")
-                # d_loss += utils.gradient_penalty(discriminator, x_real, x_fake, 1.0, DEVICE)
             d_loss.backward()
             optimD.step()
             disc_avg_loss += d_loss.item()
@@ -222,13 +210,9 @@ for e in range(args.epoch):
         x_fake = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE)).view(-1, num_of_channels, height, width)
         if args.d_model == "mlp":
             x_fake = x_fake.view(-1, feature_size)
-        g_loss = discriminator(x_fake)[:, 0]
-        if WASSERSTEIN:
-            print("not implemented")
-            # g_loss = -g_loss.mean()
-        else:
-            g_loss = -bce_with_logits(g_loss, torch.zeros(args.batch_size * args.g_num, device=DEVICE, dtype=torch.float))
-            # g_loss = bce_with_logits(g_loss, torch.ones(args.batch_size * args.g_num, device=DEVICE, dtype=torch.float))
+        g_loss = torch.softmax(discriminator(x_fake), dim=1)[:, 0]
+        g_loss = -bce(g_loss, torch.zeros(args.batch_size * args.g_num, device=DEVICE, dtype=torch.float))
+        # g_loss = bce(g_loss, torch.ones(args.batch_size * args.g_num, device=DEVICE, dtype=torch.float))
         g_loss.backward()
         optimG.step()
         gen_avg_loss += g_loss.item()
