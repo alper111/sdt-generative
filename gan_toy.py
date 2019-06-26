@@ -74,11 +74,12 @@ elif args.dataset == 'unbalanced':
     x[1250:] = torch.randn(NUM_OF_POINTS//2, 2, device=device) * 2 + torch.tensor([5., -5.], device=device)
 x = x.to(device)
 
-z = torch.randn(NUM_OF_POINTS, 2, device=device)
+z_dim = 1
+z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
-# generator = models.SoftTree(in_features=2, out_features=2, depth=5, projection='linear')
+generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
 # discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
-generator = models.MLP(layer_info=[2, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
+# generator = models.MLP(layer_info=[z_dim, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
 discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
@@ -139,7 +140,7 @@ for e in range(NUM_OF_EPOCHS):
                 d_real_loss = criterion(d_real, torch.ones_like(d_real,device=device))
             
             # train discriminator with fake data
-            x_fake = generator(torch.randn(args.batch_size, 2, device=device))
+            x_fake = generator(torch.randn(args.batch_size, z_dim, device=device))
             d_fake = discriminator(x_fake)
             # wasserstein
             if WASSERSTEIN:
@@ -162,11 +163,11 @@ for e in range(NUM_OF_EPOCHS):
             p.requires_grad = False
         optimG.zero_grad()
 
-        x_fake = generator(torch.randn(args.batch_size, 2, device=device))
+        x_fake = generator(torch.randn(args.batch_size, z_dim, device=device))
         g_fake = discriminator(x_fake)
         # wasserstein
         if WASSERSTEIN:
-            g_fake = -g_fake.mean()
+            g_loss = -g_fake.mean()
         else:
             g_loss = criterion(g_fake,torch.ones_like(g_fake, device=device))
         g_loss.backward()
