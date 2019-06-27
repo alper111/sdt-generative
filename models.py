@@ -62,6 +62,25 @@ class ConvTranspose2d(torch.nn.Module):
     def forward(self, x):
         x = self.convt(x)
         return x
+    
+class ConvBlock(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, std=None, bias=True, normalization=None, transposed=False):
+        super(ConvBlock, self).__init__()
+        if transposed:
+            self.block = [torch.nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)]
+        else:
+            self.block = [torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)]
+        if normalization == "batch_norm":
+            self.block.append(torch.nn.BatchNorm2d(out_channels))
+        self.block.append(torch.nn.ReLU())
+
+        if std is not None:
+            self.block[0].weight.data.normal_(0., std)
+            self.block[0].bias.data.normal_(0., std)
+        self.block = torch.nn.Sequential(*self.block)
+    
+    def forward(self, x):
+        return self.block(x)
 
 '''DCGAN-like convolutional encoder'''
 class ConvEncoder(torch.nn.Module):
@@ -538,29 +557,56 @@ class MADGAN(torch.nn.Module):
     def __init__(self, num_of_generators, channels, input_shape, latent_dim, std=None, normalization=None):
         super(MADGAN, self).__init__()
         self.num_of_generators = num_of_generators
-        self.normalization = normalization
-        self.shared_block = [ConvDecoder(
-            channels=channels[:-1],
-            input_shape=input_shape,
-            latent_dim=latent_dim,
-            std=std,
-            normalization=normalization
-        )]
-        if normalization == 'batch_norm':
-            self.shared_block.append(torch.nn.BatchNorm2d(channels[-2]))
-        elif normalization == 'layer_norm':
-            multiplier = len(channels)-1
-            self.shared_block.append(torch.nn.LayerNorm([input_shape[0] // multiplier, input_shape[1] * multiplier, input_shape[2] * multiplier]))
+        # self.shared_block = [ConvDecoder(
+        #     channels=channels[:-1],
+        #     input_shape=input_shape,
+        #     latent_dim=latent_dim,
+        #     std=std,
+        #     normalization=normalization
+        # )]
+        self.shared_block = [Linear(in_features=latent_dim, out_features=input_shape[0]*input_shape[1]*input_shape[2], normalization=normalization)]
+        # if normalization == 'batch_norm':
+        #     self.shared_block.append(torch.nn.BatchNorm2d(channels[-2]))
         self.shared_block.append(torch.nn.ReLU())
         self.shared_block = torch.nn.Sequential(*self.shared_block)
 
         self.generators = []
         for i in range(num_of_generators):
-            self.generators.append(ConvTranspose2d(in_channels=channels[-2], out_channels=channels[-1], kernel_size=4, stride=2, padding=1, std=std))
+            # 1st block
+            current_gen = torch.nn.Sequential(
+                ConvBlock(
+                    in_channels=input_shape[0],
+                    out_channels=channels[0],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std,
+                    normalization=normalization,
+                    transposed=True),
+                ConvBlock(
+                    in_channels=channels[0],
+                    out_channels=channels[1],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std,
+                    normalization=normalization,
+                    transposed=True
+                ),
+                ConvTranspose2d(
+                    in_channels=channels[1],
+                    out_channels=channels[2],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std))
+
+            self.generators.append(current_gen)
         self.generators = torch.nn.ModuleList(self.generators)
 
     def forward(self, x):
         h = self.shared_block(x)
+        h = h.view(x.shape[0], -1, 4, 4)
         outs = []
         for i in range(self.num_of_generators):
             outs.append(self.generators[i](h))
