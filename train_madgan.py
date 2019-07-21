@@ -83,7 +83,7 @@ generator = torch.nn.Sequential(
         channels=args.g_layers,
         input_shape=args.input_shape,
         latent_dim=args.z_dim,
-        # std=0.02,
+        std=0.02,
         normalization=args.g_norm
     ),
     torch.nn.Tanh())
@@ -174,6 +174,8 @@ for e in range(args.epoch):
         g_loss.backward()
         optimG.step()
         gen_avg_loss += g_loss.item()
+        for p in discriminator.parameters():
+            p.requires_grad = True
 
     finish = time.time()
     schedulerG.step()

@@ -92,7 +92,7 @@ print(discriminator)
 print("G num of params: %d" % utils.get_parameter_count(generator))
 print("D num of params: %d" % utils.get_parameter_count(discriminator))
 
-optimG = torch.optim.Adam(lr=args.lr, betas=(0.5, 0.999), params=generator.parameters(), amsgrad=True)
+optimG = torch.optim.Adam(lr=args.lr*10, betas=(0.5, 0.999), params=generator.parameters(), amsgrad=True)
 optimD = torch.optim.Adam(lr=args.lr, betas=(0.5, 0.999), params=discriminator.parameters(), amsgrad=True)
 criterion = torch.nn.BCEWithLogitsLoss()
 

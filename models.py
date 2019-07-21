@@ -593,9 +593,19 @@ class MADGAN(torch.nn.Module):
                     normalization=normalization,
                     transposed=True
                 ),
-                ConvTranspose2d(
+                ConvBlock(
                     in_channels=channels[1],
                     out_channels=channels[2],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std,
+                    normalization=normalization,
+                    transposed=True
+                ),
+                ConvTranspose2d(
+                    in_channels=channels[2],
+                    out_channels=channels[3],
                     kernel_size=4,
                     stride=2,
                     padding=1,
