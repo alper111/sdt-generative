@@ -89,7 +89,7 @@ generator = torch.nn.Sequential(
     torch.nn.Tanh())
 
 # discriminator definition
-discriminator = models.ConvEncoder(
+discriminator = models.ConvEncoder2(
     channels=args.d_layers,
     input_shape=[num_of_channels, height, width],
     latent_dim=args.g_num+1,

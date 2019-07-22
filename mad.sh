@@ -1,11 +1,9 @@
 #!/bin/bash
 
 python3 -u train_madgan.py \
--g_model    "conv" \
 -g_layers   128 64 1 \
 -g_num      4 \
 -g_norm     "batch_norm" \
--d_model    "conv" \
 -d_layers   64 128 256 \
 -d_norm     "batch_norm" \
 -input_shape 256 4 4 \
@@ -15,13 +13,12 @@ python3 -u train_madgan.py \
 -lr         1e-4 \
 -lr_decay   1.0 \
 -lr_step    1 \
--epoch      250 \
--out        "out/MADGAN/test" \
+-epoch      50 \
+-out        "out/MADGAN/mnist_1" \
 -seed       2019 \
 -device     "cuda:0" \
 -dataset    "mnist" \
--c_iter     1 \
 -topk       5 \
 -test_step  5 \
 -img_step   1 \
--acc        0
+-acc        1 

@@ -44,7 +44,8 @@ class Conv2d(torch.nn.Module):
         self.conv = torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
         if std is not None:
             self.conv.weight.data.normal_(0., std)
-            self.conv.bias.data.normal_(0., std)
+            if self.conv.bias is not None:
+                self.conv.bias.data.normal_(0., std)
 
     def forward(self, x):
         x = self.conv(x)
@@ -57,7 +58,8 @@ class ConvTranspose2d(torch.nn.Module):
         self.convt = torch.nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
         if std is not None:
             self.convt.weight.data.normal_(0., std)
-            self.convt.bias.data.normal_(0., std)
+            if self.convt.bias is not None:
+                self.convt.bias.data.normal_(0., std)
 
     def forward(self, x):
         x = self.convt(x)
@@ -70,9 +72,9 @@ class ConvBlock(torch.nn.Module):
             self.block = [torch.nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)]
         else:
             self.block = [torch.nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)]
+        self.block.append(torch.nn.ReLU())
         if normalization == "batch_norm":
             self.block.append(torch.nn.BatchNorm2d(out_channels))
-        self.block.append(torch.nn.ReLU())
 
         if std is not None:
             self.block[0].weight.data.normal_(0., std)
@@ -112,6 +114,29 @@ class ConvEncoder(torch.nn.Module):
         else:
             out = self.dense(out)
         return out
+
+class ConvEncoder2(torch.nn.Module):
+    def __init__(self, channels, input_shape, latent_dim, activation=torch.nn.ReLU(), std=None, normalization=None, conditional=False, num_classes=10):
+        super(ConvEncoder2, self).__init__()
+        convolutions = []
+        current_shape = input_shape
+        for ch in channels:
+            convolutions.append(Conv2d(in_channels=current_shape[0], out_channels=ch, kernel_size=4, stride=2, padding=1, std=std))
+            convolutions.append(activation)
+            current_shape = [ch, current_shape[1] // 2, current_shape[2] // 2]
+            if normalization == 'batch_norm':
+                convolutions.append(torch.nn.BatchNorm2d(ch))
+            elif normalization == 'layer_norm':
+                convolutions.append(torch.nn.LayerNorm(current_shape))
+        self.convolutions = torch.nn.Sequential(*convolutions)
+        self.dense = Linear(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=latent_dim, std=std)
+
+    def forward(self, x, y=None):
+        out = self.convolutions(x)
+        out = out.view(out.shape[0], -1)
+        out = self.dense(out)
+        return out
+
 
 '''DCGAN-like convolutional decoder'''
 class ConvDecoder(torch.nn.Module):
@@ -557,23 +582,19 @@ class MADGAN(torch.nn.Module):
     def __init__(self, num_of_generators, channels, input_shape, latent_dim, std=None, normalization=None):
         super(MADGAN, self).__init__()
         self.num_of_generators = num_of_generators
-        # self.shared_block = [ConvDecoder(
-        #     channels=channels[:-1],
-        #     input_shape=input_shape,
-        #     latent_dim=latent_dim,
-        #     std=std,
-        #     normalization=normalization
-        # )]
-        self.shared_block = [Linear(in_features=latent_dim, out_features=input_shape[0]*input_shape[1]*input_shape[2], normalization=normalization)]
-        # if normalization == 'batch_norm':
-        #     self.shared_block.append(torch.nn.BatchNorm2d(channels[-2]))
-        self.shared_block.append(torch.nn.ReLU())
-        self.shared_block = torch.nn.Sequential(*self.shared_block)
 
         self.generators = []
         for i in range(num_of_generators):
             # 1st block
-            current_gen = torch.nn.Sequential(
+            current_gen = [Linear(in_features=latent_dim, out_features=input_shape[0]*input_shape[1]*input_shape[2])]
+            current_gen.append(torch.nn.ReLU())
+            if normalization == "batch_norm":
+                current_gen.append(torch.nn.BatchNorm1d(input_shape[0]*input_shape[1]*input_shape[2]))
+            current_gen = torch.nn.Sequential(*current_gen)
+            self.generators.append(current_gen)
+        self.generators = torch.nn.ModuleList(self.generators)
+        
+        self.shared_block = [
                 ConvBlock(
                     in_channels=input_shape[0],
                     out_channels=channels[0],
@@ -582,44 +603,41 @@ class MADGAN(torch.nn.Module):
                     padding=1,
                     std=std,
                     normalization=normalization,
-                    transposed=True),
+                    transposed=True
+                    )
+                ]
+        for ch in range(len(channels)-2):
+            self.shared_block.append(
                 ConvBlock(
-                    in_channels=channels[0],
-                    out_channels=channels[1],
+                    in_channels=channels[ch],
+                    out_channels=channels[ch+1],
                     kernel_size=4,
                     stride=2,
                     padding=1,
                     std=std,
                     normalization=normalization,
                     transposed=True
-                ),
-                ConvBlock(
-                    in_channels=channels[1],
-                    out_channels=channels[2],
-                    kernel_size=4,
-                    stride=2,
-                    padding=1,
-                    std=std,
-                    normalization=normalization,
-                    transposed=True
-                ),
+                    )
+                )
+        self.shared_block.append(
                 ConvTranspose2d(
-                    in_channels=channels[2],
-                    out_channels=channels[3],
+                    in_channels=channels[-2],
+                    out_channels=channels[-1],
                     kernel_size=4,
                     stride=2,
                     padding=1,
-                    std=std))
-
-            self.generators.append(current_gen)
-        self.generators = torch.nn.ModuleList(self.generators)
+                    std=std
+                    )
+                )
+        self.shared_block = torch.nn.Sequential(*self.shared_block)
 
     def forward(self, x):
-        h = self.shared_block(x)
-        h = h.view(x.shape[0], -1, 4, 4)
         outs = []
         for i in range(self.num_of_generators):
-            outs.append(self.generators[i](h))
+            h = self.generators[i](x)
+            h = h.view(x.shape[0], -1, 4, 4)
+            out = self.shared_block(h)
+            outs.append(out)
         return torch.cat(outs, dim=0)
 
 '''a dummy identity function for copying a layer activation'''
