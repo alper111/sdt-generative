@@ -431,17 +431,21 @@ class MADGAN(torch.nn.Module):
     def __init__(self, num_of_generators, channels, input_shape, latent_dim, std=None, normalization=None):
         super(MADGAN, self).__init__()
         self.num_of_generators = num_of_generators
-
-        self.generators = []
-        for i in range(num_of_generators):
-            # 1st block
-            current_gen = [Linear(in_features=latent_dim, out_features=input_shape[0]*input_shape[1]*input_shape[2])]
-            current_gen.append(torch.nn.ReLU())
-            if normalization == "batch_norm":
-                current_gen.append(torch.nn.BatchNorm1d(input_shape[0]*input_shape[1]*input_shape[2]))
-            current_gen = torch.nn.Sequential(*current_gen)
-            self.generators.append(current_gen)
-        self.generators = torch.nn.ModuleList(self.generators)
+        projected_dim = input_shape[0]*input_shape[1]*input_shape[2]
+        self.weight = torch.nn.init.kaiming_normal_(torch.empty(num_of_generators * projected_dim, latent_dim), nonlinearity='relu')
+        self.weight = torch.nn.Parameter(self.weight.view(num_of_generators, projected_dim, latent_dim).permute(0, 2, 1))
+        self.bias = torch.nn.Parameter(torch.zeros(num_of_generators, 1, projected_dim))
+        self.bn = torch.nn.BatchNorm1d(num_of_generators * projected_dim)
+        # self.generators = []
+        # for i in range(num_of_generators):
+        #     # 1st block
+        #     current_gen = [Linear(in_features=latent_dim, out_features=projected_dim)]
+        #     current_gen.append(torch.nn.ReLU())
+        #     if normalization == "batch_norm":
+        #         current_gen.append(torch.nn.BatchNorm1d(projected_dim))
+        #     current_gen = torch.nn.Sequential(*current_gen)
+        #     self.generators.append(current_gen)
+        # self.generators = torch.nn.ModuleList(self.generators)
         
         self.shared_block = [
                 ConvBlock(
@@ -481,13 +485,28 @@ class MADGAN(torch.nn.Module):
         self.shared_block = torch.nn.Sequential(*self.shared_block)
 
     def forward(self, x):
-        outs = []
-        for i in range(self.num_of_generators):
-            h = self.generators[i](x)
-            h = h.view(x.shape[0], -1, 4, 4)
-            out = self.shared_block(h)
-            outs.append(out)
-        return torch.cat(outs, dim=0)
+        # (num_g, batch, dim)
+        h = torch.relu(torch.matmul(x, self.weight)+self.bias)
+        # (batch, num_g, dim)
+        h = h.permute(1,0,2).contiguous()
+        # (batch, num_g * dim)
+        h = self.bn(h.view(x.shape[0], -1))
+        # (batch, num_g, dim)
+        h = h.view(x.shape[0], self.num_of_generators, -1)
+        # (num_g, batch, dim)
+        h = h.permute(1,0,2).contiguous()
+        # (num_g * batch, channel, height, width)
+        h = h.view(x.shape[0] * self.num_of_generators, -1, 4, 4)
+
+        out = self.shared_block(h) 
+        return out
+        # outs = []
+        # for i in range(self.num_of_generators):
+        #     h = self.generators[i](x)
+        #     h = h.view(x.shape[0], -1, 4, 4)
+        #     out = self.shared_block(h)
+        #     outs.append(out)
+        # return torch.cat(outs, dim=0)
 
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):
