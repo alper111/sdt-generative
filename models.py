@@ -496,6 +496,7 @@ class MEGANGen(torch.nn.Module):
     def __init__(self, num_of_generators, channels, input_shape, latent_dim, std=None, normalization=None):
         super(MEGANGen, self).__init__()
         self.num_of_generators = num_of_generators
+        self.normalization = normalization
         projected_dim = input_shape[0]*input_shape[1]*input_shape[2]
         self.weight = torch.nn.init.kaiming_normal_(torch.empty(num_of_generators * projected_dim, latent_dim), nonlinearity='relu')
         self.weight = torch.nn.Parameter(self.weight.view(num_of_generators, projected_dim, latent_dim).permute(0, 2, 1))
@@ -549,7 +550,7 @@ class MEGANGen(torch.nn.Module):
         # (batch, num_g, dim)
         h = h.permute(1,0,2).contiguous()
         # (batch, num_g * dim)
-        if self.bn is not None:
+        if self.normalization is not None:
             h = self.bn(h.view(x.shape[0], -1))
         else:
             h = h.view(x.shape[0], -1)

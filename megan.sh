@@ -3,9 +3,8 @@
 python3 -u train_megan.py \
 -g_layers   128 64 1 \
 -g_num      4 \
--g_norm     "batch_norm" \
 -d_layers   64 128 256 \
--d_norm     "batch_norm" \
+-d_norm     "layer_norm" \
 -input_shape 256 4 4 \
 -z_dim      100 \
 -batch_size 128 \
