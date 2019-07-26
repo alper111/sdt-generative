@@ -436,16 +436,71 @@ class MADGAN(torch.nn.Module):
         self.weight = torch.nn.Parameter(self.weight.view(num_of_generators, projected_dim, latent_dim).permute(0, 2, 1))
         self.bias = torch.nn.Parameter(torch.zeros(num_of_generators, 1, projected_dim))
         self.bn = torch.nn.BatchNorm1d(num_of_generators * projected_dim)
-        # self.generators = []
-        # for i in range(num_of_generators):
-        #     # 1st block
-        #     current_gen = [Linear(in_features=latent_dim, out_features=projected_dim)]
-        #     current_gen.append(torch.nn.ReLU())
-        #     if normalization == "batch_norm":
-        #         current_gen.append(torch.nn.BatchNorm1d(projected_dim))
-        #     current_gen = torch.nn.Sequential(*current_gen)
-        #     self.generators.append(current_gen)
-        # self.generators = torch.nn.ModuleList(self.generators)
+                
+        self.shared_block = [
+                ConvBlock(
+                    in_channels=input_shape[0],
+                    out_channels=channels[0],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std,
+                    normalization=normalization,
+                    transposed=True
+                    )
+                ]
+        for ch in range(len(channels)-2):
+            self.shared_block.append(
+                ConvBlock(
+                    in_channels=channels[ch],
+                    out_channels=channels[ch+1],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std,
+                    normalization=normalization,
+                    transposed=True
+                    )
+                )
+        self.shared_block.append(
+                ConvTranspose2d(
+                    in_channels=channels[-2],
+                    out_channels=channels[-1],
+                    kernel_size=4,
+                    stride=2,
+                    padding=1,
+                    std=std
+                    )
+                )
+        self.shared_block = torch.nn.Sequential(*self.shared_block)
+
+    def forward(self, x):
+        # (num_g, batch, dim)
+        h = torch.relu(torch.matmul(x, self.weight)+self.bias)
+        # (batch, num_g, dim)
+        h = h.permute(1,0,2).contiguous()
+        # (batch, num_g * dim)
+        h = self.bn(h.view(x.shape[0], -1))
+        # (batch, num_g, dim)
+        h = h.view(x.shape[0], self.num_of_generators, -1)
+        # (num_g, batch, dim)
+        h = h.permute(1,0,2).contiguous()
+        # (num_g * batch, channel, height, width)
+        h = h.view(x.shape[0] * self.num_of_generators, -1, 4, 4)
+
+        out = self.shared_block(h) 
+        return out
+
+class MEGANGen(torch.nn.Module):
+    def __init__(self, num_of_generators, channels, input_shape, latent_dim, std=None, normalization=None):
+        super(MEGANGen, self).__init__()
+        self.num_of_generators = num_of_generators
+        projected_dim = input_shape[0]*input_shape[1]*input_shape[2]
+        self.weight = torch.nn.init.kaiming_normal_(torch.empty(num_of_generators * projected_dim, latent_dim), nonlinearity='relu')
+        self.weight = torch.nn.Parameter(self.weight.view(num_of_generators, projected_dim, latent_dim).permute(0, 2, 1))
+        self.bias = torch.nn.Parameter(torch.zeros(num_of_generators, 1, projected_dim))
+        self.bn = torch.nn.BatchNorm1d(num_of_generators * projected_dim)
+        self.feat_projector = Linear(in_features=projected_dim, out_features=latent_dim)
         
         self.shared_block = [
                 ConvBlock(
@@ -500,13 +555,8 @@ class MADGAN(torch.nn.Module):
 
         out = self.shared_block(h) 
         return out
-        # outs = []
-        # for i in range(self.num_of_generators):
-        #     h = self.generators[i](x)
-        #     h = h.view(x.shape[0], -1, 4, 4)
-        #     out = self.shared_block(h)
-        #     outs.append(out)
-        # return torch.cat(outs, dim=0)
+
+
 
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):

@@ -10,6 +10,25 @@ import matplotlib.pyplot as plt
 from matplotlib import animation, rc
 from scipy.linalg import sqrtm
 
+def sample_gumbel(logits):
+    u = torch.rand_like(logits)
+    eps = 1e-20
+    u.add_(eps).log_().neg_()
+    u.add_(eps).log_().neg_()
+    return u 
+
+def gumbel_softmax_sample(logits, temp=1.):
+    g = sample_gumbel(logits)
+    y = (g + logits) / temp
+    return torch.softmax(y, dim=1)
+
+def gumbel_softmax(logits, temp=1.):
+    y = gumbel_softmax_sample(logits, temp)
+    _, ind = torch.max(y, dim=1)
+    y_hard = torch.eye(logits.shape[1])[ind]
+    y = (y_hard - y).detach() + y
+    return y
+
 def p2dist(x, y):
     return torch.pow(x, 2).sum(dim=1).view(-1,1) - 2 * torch.matmul(x, y.t()) + torch.pow(y, 2).sum(dim=1)
 
