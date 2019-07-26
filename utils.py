@@ -25,7 +25,7 @@ def gumbel_softmax_sample(logits, temp=1.):
 def gumbel_softmax(logits, temp=1.):
     y = gumbel_softmax_sample(logits, temp)
     _, ind = torch.max(y, dim=1)
-    y_hard = torch.eye(logits.shape[1])[ind]
+    y_hard = torch.eye(logits.shape[1], device=logits.device)[ind]
     y = (y_hard - y).detach() + y
     return y
 

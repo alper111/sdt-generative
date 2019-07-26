@@ -2,6 +2,7 @@ import numpy
 import math
 import torch
 import torchvision
+import utils
 
 '''linear layer with optional batch normalization or layer normalization'''
 class Linear(torch.nn.Module):
@@ -499,8 +500,11 @@ class MEGANGen(torch.nn.Module):
         self.weight = torch.nn.init.kaiming_normal_(torch.empty(num_of_generators * projected_dim, latent_dim), nonlinearity='relu')
         self.weight = torch.nn.Parameter(self.weight.view(num_of_generators, projected_dim, latent_dim).permute(0, 2, 1))
         self.bias = torch.nn.Parameter(torch.zeros(num_of_generators, 1, projected_dim))
-        self.bn = torch.nn.BatchNorm1d(num_of_generators * projected_dim)
+        if normalization == "batch_norm":
+            self.bn = torch.nn.BatchNorm1d(num_of_generators * projected_dim)
         self.feat_projector = Linear(in_features=projected_dim, out_features=latent_dim)
+        self.gating = Linear(in_features=latent_dim*(num_of_generators+1), out_features=num_of_generators)
+
         
         self.shared_block = [
                 ConvBlock(
@@ -545,16 +549,26 @@ class MEGANGen(torch.nn.Module):
         # (batch, num_g, dim)
         h = h.permute(1,0,2).contiguous()
         # (batch, num_g * dim)
-        h = self.bn(h.view(x.shape[0], -1))
+        if self.bn is not None:
+            h = self.bn(h.view(x.shape[0], -1))
+        else:
+            h = h.view(x.shape[0], -1)
         # (batch, num_g, dim)
         h = h.view(x.shape[0], self.num_of_generators, -1)
-        # (num_g, batch, dim)
-        h = h.permute(1,0,2).contiguous()
-        # (num_g * batch, channel, height, width)
+        
+        ## gating
+        feats = self.feat_projector(h.view(x.shape[0]*self.num_of_generators, -1))
+        feats = feats.view(x.shape[0], self.num_of_generators, -1)
+        feats = torch.cat([feats, x.unsqueeze(1)], dim=1).view(x.shape[0], -1)
+        gate_logits = self.gating(feats)
+
+        ## sample generation
+        # (batch * num_g, channel, height, width)
         h = h.view(x.shape[0] * self.num_of_generators, -1, 4, 4)
 
-        out = self.shared_block(h) 
-        return out
+        out = self.shared_block(h)
+        out = out.view(x.shape[0], self.num_of_generators, out.shape[1], out.shape[2], out.shape[3])
+        return out, gate_logits
 
 
 
