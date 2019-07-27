@@ -115,6 +115,7 @@ optim_gum = torch.optim.Adam(
 schedulerG = torch.optim.lr_scheduler.StepLR(optimizer=optimG, gamma=args.lr_decay, step_size=args.lr_step)
 schedulerD = torch.optim.lr_scheduler.StepLR(optimizer=optimD, gamma=args.lr_decay, step_size=args.lr_step)
 criterion = torch.nn.MSELoss()
+bce_with_logits = torch.nn.BCEWithLogitsLoss()
 print("GENERATOR")
 print(generator)
 print("DISCRIMINATOR")
@@ -156,16 +157,18 @@ for e in range(args.epoch):
             x_real, _ = iterator.next()
             x_real = x_real.to(DEVICE)
             d_real = discriminator(x_real)
-            d_real_loss = -d_real.mean()
+            # d_real_loss = -d_real.mean()
+            d_real_loss = bce_with_logits(d_real, torch.ones_like(d_real, device=DEVICE))
 
             # train discriminator with fake data
             x_fake, gating = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE))
             x_fake = torch.tanh(x_fake[utils.gumbel_softmax(gating).type(torch.uint8)]) 
             d_fake = discriminator(x_fake)
-            d_fake_loss = d_fake.mean()
+            # d_fake_loss = d_fake.mean()
+            d_fake_loss = bce_with_logits(d_fake, torch.zeros_like(d_fake, device=DEVICE))
 
             d_loss = d_real_loss + d_fake_loss
-            d_loss += utils.gradient_penalty(discriminator, x_real, x_fake, 1.0, DEVICE)
+            # d_loss += utils.gradient_penalty(discriminator, x_real, x_fake, 1.0, DEVICE)
 
             d_loss.backward()
             optimD.step()
@@ -179,13 +182,15 @@ for e in range(args.epoch):
         x_fake, gating = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE))
         x_fake = torch.tanh(x_fake[utils.gumbel_softmax(gating).type(torch.uint8)])
         g_fake_loss = discriminator(x_fake)
-        g_loss = -g_fake_loss.mean()
+        # g_loss = -g_fake_loss.mean()
+        g_loss = bce_with_logits(g_fake_loss, torch.ones_like(g_fake_loss, device=DEVICE))
         g_loss.backward(retain_graph=True)
         optimG.step()
         # optim_gum.step()
         gen_avg_loss += g_loss.item()
 
         # train gating
+        g_loss = bce_with_logits(g_fake_loss, torch.ones_like(g_fake_loss, device=DEVICE))
         optim_gum.zero_grad()
         softmax = utils.gumbel_softmax_sample(gating)
         dist = softmax.sum(dim=0) / softmax.sum()
