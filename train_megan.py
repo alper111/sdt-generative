@@ -182,10 +182,11 @@ for e in range(args.epoch):
         g_loss = -g_fake_loss.mean()
         g_loss.backward(retain_graph=True)
         optimG.step()
-        optim_gum.step()
+        # optim_gum.step()
         gen_avg_loss += g_loss.item()
 
         # train gating
+        optim_gum.zero_grad()
         softmax = utils.gumbel_softmax_sample(gating)
         dist = softmax.sum(dim=0) / softmax.sum()
         target = torch.ones(args.g_num, device=DEVICE, dtype=torch.float) / args.g_num
