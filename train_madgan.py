@@ -191,33 +191,35 @@ for e in range(args.epoch):
         print("### set your alarm at:",finish,"###")
 
     if (e+1) % args.img_step == 0:
-        generator.eval()
-        samples = generator(torch.randn(10, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
-        torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
-        generator.train()
+        with torch.no_grad():
+            generator.eval()
+            samples = generator(torch.randn(10, args.z_dim, device=DEVICE)).cpu().detach() * 0.5 + 0.5
+            torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
+            generator.train()
 
     # 1-nn accuracy
     if (e+1) % args.test_step == 0:
-        generator.eval()
-        discriminator.eval()
-        print("calculating nn accuracy...")
-        fake_samples = torch.empty(test_size, num_of_channels, height, width)
-        if ACC:
-            fake_feats = torch.empty(test_size, 2048)
-        for xx in range(test_size // 100):
-            samples = generator(torch.randn(100 // args.g_num + 1, args.z_dim, device=DEVICE)).cpu().detach()*0.5+0.5
-            perm = torch.randperm(samples.shape[0])
-            fake_samples[xx*100:(xx+1)*100] = samples[perm[:100]]
-
+        with torch.no_grad():
+            generator.eval()
+            discriminator.eval()
+            print("calculating nn accuracy...")
+            fake_samples = torch.empty(test_size, num_of_channels, height, width)
             if ACC:
-                fake_feats[xx*100:(xx+1)*100] = inception(fake_samples[xx*100:(xx+1)*100].to(DEVICE)).cpu()
-        if ACC:
-            fid = utils.FID_score(x_real=real_feats, x_fake=fake_feats)
-            fake_acc, real_acc = utils.nn_accuracy(p_fake=fake_feats.to(DEVICE), p_real=real_feats.to(DEVICE), device=DEVICE, k=args.topk)
-        else:
-            fid = -1
-            fake_samples = fake_samples.view(-1,feature_size)
-            fake_acc, real_acc = utils.nn_accuracy(p_fake=fake_samples.to(DEVICE), p_real=real_samples.to(DEVICE)*0.5+0.5, device=DEVICE, k=args.topk)
+                fake_feats = torch.empty(test_size, 2048)
+            for xx in range(test_size // 100):
+                samples = generator(torch.randn(100 // args.g_num + 1, args.z_dim, device=DEVICE)).cpu().detach()*0.5+0.5
+                perm = torch.randperm(samples.shape[0])
+                fake_samples[xx*100:(xx+1)*100] = samples[perm[:100]]
+
+                if ACC:
+                    fake_feats[xx*100:(xx+1)*100] = inception(fake_samples[xx*100:(xx+1)*100].to(DEVICE)).cpu()
+            if ACC:
+                fid = utils.FID_score(x_real=real_feats, x_fake=fake_feats)
+                fake_acc, real_acc = utils.nn_accuracy(p_fake=fake_feats.to(DEVICE), p_real=real_feats.to(DEVICE), device=DEVICE, k=args.topk)
+            else:
+                fid = -1
+                fake_samples = fake_samples.view(-1,feature_size)
+                fake_acc, real_acc = utils.nn_accuracy(p_fake=fake_samples.to(DEVICE), p_real=real_samples.to(DEVICE)*0.5+0.5, device=DEVICE, k=args.topk)
         
         print("fake acc: %.5f - real acc: %.5f - FID: %.5f" % (fake_acc, real_acc, fid))
         fake_acc_total.append(fake_acc)
