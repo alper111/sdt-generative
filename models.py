@@ -557,18 +557,22 @@ class MEGANGen(torch.nn.Module):
         # (batch, num_g, dim)
         h = h.view(x.shape[0], self.num_of_generators, -1)
         
-        ## gating
+        # calculate gate logits 
         feats = self.feat_projector(h.view(x.shape[0]*self.num_of_generators, -1))
         feats = feats.view(x.shape[0], self.num_of_generators, -1)
         feats = torch.cat([feats, x.unsqueeze(1)], dim=1).view(x.shape[0], -1)
-        gate_logits = self.gating(feats)
+        gate_logits = self.gating(feats) 
 
+        # gating
+        gate = utils.gumbel_softmax(gate_logits).unsqueeze(2)
+        h = torch.mul(h, gate).sum(dim=1)
+         
         ## sample generation
-        # (batch * num_g, channel, height, width)
-        h = h.view(x.shape[0] * self.num_of_generators, -1, 4, 4)
+        # (batch, channel, height, width)
+        h = h.view(x.shape[0], -1, 4, 4)
 
         out = self.shared_block(h)
-        out = out.view(x.shape[0], self.num_of_generators, out.shape[1], out.shape[2], out.shape[3])
+        # out = out.view(x.shape[0], self.num_of_generators, out.shape[1], out.shape[2], out.shape[3])
         return out, gate_logits
 
 

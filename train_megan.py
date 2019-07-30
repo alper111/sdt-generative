@@ -157,18 +157,18 @@ for e in range(args.epoch):
             x_real, _ = iterator.next()
             x_real = x_real.to(DEVICE)
             d_real = discriminator(x_real)
-            # d_real_loss = -d_real.mean()
+            # d_real_loss = -d_real.mean()
             d_real_loss = bce_with_logits(d_real, torch.ones_like(d_real, device=DEVICE))
 
             # train discriminator with fake data
-            x_fake, gating = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE))
-            x_fake = torch.tanh(x_fake[utils.gumbel_softmax(gating).type(torch.uint8)]) 
+            x_fake, _ = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE))
+            x_fake = torch.tanh(x_fake) 
             d_fake = discriminator(x_fake)
-            # d_fake_loss = d_fake.mean()
+            # d_fake_loss = d_fake.mean()
             d_fake_loss = bce_with_logits(d_fake, torch.zeros_like(d_fake, device=DEVICE))
 
             d_loss = d_real_loss + d_fake_loss
-            # d_loss += utils.gradient_penalty(discriminator, x_real, x_fake, 1.0, DEVICE)
+            # d_loss += utils.gradient_penalty(discriminator, x_real, x_fake, 1.0, DEVICE)
 
             d_loss.backward()
             optimD.step()
@@ -178,19 +178,16 @@ for e in range(args.epoch):
         for p in discriminator.parameters():
             p.requires_grad = False
         optimG.zero_grad()
-        optim_gum.zero_grad()
         x_fake, gating = generator(torch.randn(args.batch_size, args.z_dim, device=DEVICE))
-        x_fake = torch.tanh(x_fake[utils.gumbel_softmax(gating).type(torch.uint8)])
+        x_fake = torch.tanh(x_fake)
         g_fake_loss = discriminator(x_fake)
-        # g_loss = -g_fake_loss.mean()
+        # g_loss = -g_fake_loss.mean()
         g_loss = bce_with_logits(g_fake_loss, torch.ones_like(g_fake_loss, device=DEVICE))
         g_loss.backward(retain_graph=True)
         optimG.step()
-        # optim_gum.step()
         gen_avg_loss += g_loss.item()
 
         # train gating
-        g_loss = bce_with_logits(g_fake_loss, torch.ones_like(g_fake_loss, device=DEVICE))
         optim_gum.zero_grad()
         softmax = utils.gumbel_softmax_sample(gating)
         dist = softmax.sum(dim=0) / softmax.sum()
@@ -218,8 +215,8 @@ for e in range(args.epoch):
     if (e+1) % args.img_step == 0:
         with torch.no_grad():
             generator.eval()
-            samples, gating = generator(torch.randn(100, args.z_dim, device=DEVICE))
-            samples = torch.tanh(samples[utils.gumbel_softmax(gating).type(torch.uint8)]).cpu().detach()*0.5 + 0.5
+            samples, _ = generator(torch.randn(100, args.z_dim, device=DEVICE))
+            samples = torch.tanh(samples).cpu().detach()*0.5 + 0.5
             torchvision.utils.save_image(samples, "gan_{0}.png".format(e+1), nrow=10)
             generator.train()
 
@@ -233,8 +230,8 @@ for e in range(args.epoch):
             if ACC:
                 fake_feats = torch.empty(test_size, 2048)
             for xx in range(test_size // 100):
-                samples, gating = generator(torch.randn(100, args.z_dim, device=DEVICE))
-                fake_samples[xx*100:(xx+1)*100] = torch.tanh(samples[utils.gumbel_softmax(gating).type(torch.uint8)]).cpu().detach()*0.5+0.5
+                samples, _ = generator(torch.randn(100, args.z_dim, device=DEVICE))
+                fake_samples[xx*100:(xx+1)*100] = torch.tanh(samples).cpu().detach()*0.5+0.5
                 if ACC:
                     fake_feats[xx*100:(xx+1)*100] = inception(fake_samples[xx*100:(xx+1)*100].to(DEVICE)).cpu()
             if ACC:
