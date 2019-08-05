@@ -235,7 +235,6 @@ class SoftTree(torch.nn.Module):
                 torch.empty(self.gate_count, in_features), nonlinearity='sigmoid').t())
         self.gb = torch.nn.Parameter(torch.zeros(self.gate_count))
         # dropout rate for gating weights.
-        # see: Ahmetoglu et al. 2018 https://doi.org/10.1007/978-3-030-01418-6_14
         self.drop = torch.nn.Dropout(p=dropout)
         if self.proj == 'linear':
             self.pw = torch.nn.init.kaiming_normal_(torch.empty(out_features*self.leaf_count, in_features), nonlinearity='linear')
