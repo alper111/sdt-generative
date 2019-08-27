@@ -18,7 +18,7 @@ parser.add_argument('-batch_size',help='batch size. default 16',default=16,type=
 parser.add_argument('-epoch',default=300,type=int)
 parser.add_argument('-out',help='output folder.',type=str,required=True)
 parser.add_argument('-title',help='title of the animation.',type=str,required=True)
-parser.add_argument('-seed',help='seed. default 2019.',default=2019,type=int)
+parser.add_argument('-seed',help='seed. default 2019.',type=int)
 parser.add_argument('-dataset', help='grid, spiral, ellipse, unbalanced.', default='grid', type=str)
 parser.add_argument('-wasserstein', default=0, type=int)
 parser.add_argument('-c_iter', default=1, type=int)
@@ -28,6 +28,9 @@ if torch.cuda.is_available():
     device = torch.device("cuda:0")
 else:
     device = torch.device("cpu")
+
+if args.seed is None:
+    args.seed = np.random.randint(0, 1000)
 
 WASSERSTEIN = True if args.wasserstein==1 else False
 NUM_OF_POINTS = 2500
@@ -72,14 +75,24 @@ elif args.dataset == 'unbalanced':
     x = torch.empty(NUM_OF_POINTS, 2, device=device)
     x[:1250] = torch.randn(NUM_OF_POINTS//2, 2, device=device) * 0.25 + torch.tensor([-5., 5.], device=device)
     x[1250:] = torch.randn(NUM_OF_POINTS//2, 2, device=device) * 2 + torch.tensor([5., -5.], device=device)
+elif args.dataset == 'gmm':
+    x = torch.randn(NUM_OF_POINTS, 2, device=device)
+    k = 5
+    cluster_size = NUM_OF_POINTS // k
+    for i in range(k):
+        rand_std = torch.rand(1,2, device=device)*2 + 0.5
+        rand_mu = torch.rand(1,2, device=device)*24 - 12
+        x[i*cluster_size:(i+1)*cluster_size] = x[i*cluster_size:(i+1)*cluster_size] * rand_std + rand_mu 
+
 x = x.to(device)
 
 z_dim = 1
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
-generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
-# discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
-# generator = models.MLP(layer_info=[z_dim, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
+# generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
+generator = models.MoE(in_features=z_dim, out_features=2, num_leafs=8, projection='linear')
+# discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
+# generator = models.MLP(layer_info=[z_dim, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
 discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
@@ -92,7 +105,7 @@ print(discriminator)
 print("G num of params: %d" % utils.get_parameter_count(generator))
 print("D num of params: %d" % utils.get_parameter_count(discriminator))
 
-optimG = torch.optim.Adam(lr=args.lr*10, betas=(0.5, 0.999), params=generator.parameters(), amsgrad=True)
+optimG = torch.optim.Adam(lr=args.lr*8, betas=(0.5, 0.999), params=generator.parameters(), amsgrad=True)
 optimD = torch.optim.Adam(lr=args.lr, betas=(0.5, 0.999), params=discriminator.parameters(), amsgrad=True)
 criterion = torch.nn.BCEWithLogitsLoss()
 
