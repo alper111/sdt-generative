@@ -574,7 +574,45 @@ class MEGANGen(torch.nn.Module):
         # out = out.view(x.shape[0], self.num_of_generators, out.shape[1], out.shape[2], out.shape[3])
         return out, gate_logits
 
+class MultiLinear(torch.nn.Module):
+    def __init__(self, in_features, out_features, num_of_generators):
+        super(MultiLinear, self).__init__()
+        self.num_of_generators = num_of_generators
+        self.generators = []
+        for i in range(num_of_generators):
+            self.generators.append(MLP([in_features, out_features, out_features], activation=torch.nn.Tanh()))
+        self.generators = torch.nn.ModuleList(self.generators)
+        
+    def forward(self, x):
+        o = []
+        for i in range(self.num_of_generators):
+            o.append(self.generators[i](x))
+        return torch.cat(o, dim=0)
 
+class MultiMEGAN(torch.nn.Module):
+    def __init__(self, in_features, out_features, num_of_generators):
+        super(MultiMEGAN, self).__init__()
+        self.num_of_generators = num_of_generators
+        self.generators = []
+        for i in range(num_of_generators):
+            self.generators.append(MLP([in_features, out_features, out_features], activation=torch.nn.Tanh()))
+        self.generators = torch.nn.ModuleList(self.generators)
+        self.gating = torch.nn.Linear(in_features=out_features*(num_of_generators+1), out_features=num_of_generators)
+
+    def forward(self, x):
+        o = []
+        for i in range(self.num_of_generators):
+            o.append(self.generators[i](x))
+        o = torch.cat(o, dim=0).view(self.num_of_generators, x.shape[0], -1)
+        
+        # (batch, num_g, dim)
+        o = o.permute(1,0,2)
+        x_extended = torch.stack([x, x], dim=2)
+        feat = torch.cat([o, x_extended], dim=1).view(x.shape[0], -1)
+        gating_logits = self.gating(feat)
+        gate = utils.gumbel_softmax(gating_logits).unsqueeze(2)
+        o = torch.mul(o, gate).sum(dim=1)
+        return o, gating_logits
 
 '''a dummy identity function for copying a layer activation'''
 class I(torch.nn.Module):
