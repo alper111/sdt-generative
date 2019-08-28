@@ -597,7 +597,8 @@ class MultiMEGAN(torch.nn.Module):
         for i in range(num_of_generators):
             self.generators.append(MLP([in_features, out_features, out_features], activation=torch.nn.Tanh()))
         self.generators = torch.nn.ModuleList(self.generators)
-        self.gating = torch.nn.Linear(in_features=out_features*(num_of_generators+1), out_features=num_of_generators)
+        self.gating = torch.nn.Linear(in_features=in_features*(num_of_generators+1), out_features=num_of_generators)
+        self.feat_projector = Linear(in_features=out_features, out_features=in_features)
 
     def forward(self, x):
         o = []
@@ -606,9 +607,9 @@ class MultiMEGAN(torch.nn.Module):
         o = torch.cat(o, dim=0).view(self.num_of_generators, x.shape[0], -1)
         
         # (batch, num_g, dim)
-        o = o.permute(1,0,2)
-        x_extended = torch.stack([x, x], dim=2)
-        feat = torch.cat([o, x_extended], dim=1).view(x.shape[0], -1)
+        o = o.permute(1,0,2).contiguous()
+        feat = self.feat_projector(o.view(x.shape[0] * self.num_of_generators, -1)).view(x.shape[0], self.num_of_generators, -1)
+        feat = torch.cat([feat, x.unsqueeze(1)], dim=1).view(x.shape[0], -1)
         gating_logits = self.gating(feat)
         gate = utils.gumbel_softmax(gating_logits).unsqueeze(2)
         o = torch.mul(o, gate).sum(dim=1)

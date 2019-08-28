@@ -86,7 +86,8 @@ x = x.to(device)
 z_dim = 1
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
-generator = models.MultiMEGAN(in_features=z_dim, out_features=2, num_of_generators=8)
+num_g = 8
+generator = models.MultiMEGAN(in_features=z_dim, out_features=2, num_of_generators=num_g)
 discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
@@ -100,8 +101,11 @@ print("G num of params: %d" % utils.get_parameter_count(generator))
 print("D num of params: %d" % utils.get_parameter_count(discriminator))
 
 optimG = torch.optim.Adam(lr=args.lr, betas=(0.5, 0.999), params=generator.parameters(), amsgrad=True)
-optim_gating = torch.optim.Adam(lr=args.lr, betas=(0.5, 0.999), params=generator.gating.parameters(), amsgrad=True)
 optimD = torch.optim.Adam(lr=args.lr, betas=(0.5, 0.999), params=discriminator.parameters(), amsgrad=True)
+optim_gating = torch.optim.Adam(
+    lr=args.lr,
+    betas=(0.5, 0.999),
+    params=[{"params": generator.gating.parameters()}, {"params": generator.feat_projector.parameters()}], amsgrad=True)
 bce_with_logits = torch.nn.BCEWithLogitsLoss()
 mse_loss = torch.nn.MSELoss()
 
@@ -169,8 +173,8 @@ for e in range(NUM_OF_EPOCHS):
         optim_gating.zero_grad()
         softmax = utils.gumbel_softmax_sample(gating)
         dist = softmax.sum(dim=0) / softmax.sum()
-        target = torch.ones(8, device=device, dtype=torch.float) / 8
-        dist_loss = mse_loss(dist, target)
+        target = torch.ones(num_g, device=device, dtype=torch.float) / num_g
+        dist_loss = mse_loss(dist, target)*10
         dist_loss.backward()
         optim_gating.step()
         
@@ -182,11 +186,20 @@ for e in range(NUM_OF_EPOCHS):
     print("epoch: %d - disc loss: %.5f - gen loss: %.5f - time elapsed: %.5f" % (e+1, disc_avg_loss / d_count, gen_avg_loss / g_count, finish_time-start_time))
     gen_total.append(gen_avg_loss/g_count)
     disc_total.append(disc_avg_loss/d_count)
-    
+
     generator.eval()
     discriminator.eval()
     with torch.no_grad():
         fake_samples, _ = generator(z)
+        ff = discriminator(field)
+        ff = torch.sigmoid(ff).cpu().numpy()
+        indexes = (ff*100).astype(np.int32).reshape(-1)
+        d_fields.append(indexes)
+        data = np.zeros((size * 2,2))
+        data[:size] = x.cpu()
+        data[size:] = fake_samples.cpu().numpy()
+        timesteps.append(data)
+
         fake_acc, real_acc = utils.nn_accuracy(p_real=x, p_fake=fake_samples, k=5)
         fid = utils.FID_score(x.cpu(), fake_samples.cpu())
         print("fake acc: %.5f - real acc: %.5f - FID: %.5f" % (fake_acc, real_acc, fid))
@@ -226,3 +239,12 @@ np.save(out_directory+"fake.npy", fake_total)
 np.save(out_directory+"real.npy", real_total)
 np.save(out_directory+"g_loss.npy", gen_total)
 np.save(out_directory+"d_loss.npy", disc_total)
+
+utils.save_animation_withdisc(
+    name=out_directory+'animation.mp4',
+    timesteps=timesteps,
+    d_field=d_fields,
+    lims=(-15, 15),
+    title=args.title,
+    alpha=0.5)
+
