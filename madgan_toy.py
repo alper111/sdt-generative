@@ -181,9 +181,10 @@ for e in range(NUM_OF_EPOCHS):
     generator.eval()
     discriminator.eval()
     with torch.no_grad():
-        R = torch.randperm(z.shape[0])
+        fake_samples = generator(z)
+        R = torch.randperm(fake_samples.shape[0])
+        fake_samples = fake_samples[R[:x.shape[0]]]
 
-        fake_samples = generator(z)[R[:x.shape[0]]]
         ff = 1-torch.softmax(discriminator(field), dim=1)[:, 0]
         ff = ff.cpu().numpy()
         indexes = (ff*100).astype(np.int32).reshape(-1)
@@ -193,7 +194,7 @@ for e in range(NUM_OF_EPOCHS):
         data[size:] = fake_samples.cpu().numpy()
         timesteps.append(data)
         
-        fake_acc, real_acc = utils.nn_accuracy(p_real=x, p_fake=generator(z)[R[:x.shape[0]]], k=5)
+        fake_acc, real_acc = utils.nn_accuracy(p_real=x, p_fake=fake_samples, k=5)
         fid = utils.FID_score(x.cpu(), generator(z).cpu())
         print("fake acc: %.5f - real acc: %.5f - FID: %.5f" % (fake_acc, real_acc, fid))
         fake_total.append(fake_acc)
