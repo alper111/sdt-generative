@@ -83,7 +83,7 @@ elif args.dataset == 'gmm':
 
 x = x.to(device)
 
-z_dim = 1
+z_dim = 2
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
 generator = models.MultiLinear(in_features=z_dim, out_features=2, num_of_generators=8)
@@ -182,6 +182,17 @@ for e in range(NUM_OF_EPOCHS):
     discriminator.eval()
     with torch.no_grad():
         R = torch.randperm(z.shape[0])
+
+        fake_samples = generator(z)[R[:x.shape[0]]]
+        ff = 1-torch.softmax(discriminator(field), dim=1)[:, 0]
+        ff = ff.cpu().numpy()
+        indexes = (ff*100).astype(np.int32).reshape(-1)
+        d_fields.append(indexes)
+        data = np.zeros((size * 2,2))
+        data[:size] = x.cpu()
+        data[size:] = fake_samples.cpu().numpy()
+        timesteps.append(data)
+        
         fake_acc, real_acc = utils.nn_accuracy(p_real=x, p_fake=generator(z)[R[:x.shape[0]]], k=5)
         fid = utils.FID_score(x.cpu(), generator(z).cpu())
         print("fake acc: %.5f - real acc: %.5f - FID: %.5f" % (fake_acc, real_acc, fid))
@@ -221,3 +232,11 @@ np.save(out_directory+"fake.npy", fake_total)
 np.save(out_directory+"real.npy", real_total)
 np.save(out_directory+"g_loss.npy", gen_total)
 np.save(out_directory+"d_loss.npy", disc_total)
+
+utils.save_animation_withdisc(
+    name=out_directory+'animation.mp4',
+    timesteps=timesteps,
+    d_field=d_fields,
+    lims=(-15, 15),
+    title=args.title,
+    alpha=0.5)

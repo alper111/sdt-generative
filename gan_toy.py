@@ -55,10 +55,10 @@ if args.dataset == 'grid':
     x = torch.empty(NUM_OF_POINTS, 2, dtype=torch.float)
     CLUSTER_SIZE = NUM_OF_POINTS // 25
     for i in range(5):
-       for j in range(5):
-           x[it*CLUSTER_SIZE:(it+1)*CLUSTER_SIZE,0] = torch.randn(CLUSTER_SIZE) * 0.05 + x_axis[i]
-           x[it*CLUSTER_SIZE:(it+1)*CLUSTER_SIZE,1] = torch.randn(CLUSTER_SIZE) * 0.05 + y_axis[j]
-           it += 1
+        for j in range(5):
+            x[it*CLUSTER_SIZE:(it+1)*CLUSTER_SIZE,0] = torch.randn(CLUSTER_SIZE) * 0.05 + x_axis[i]
+            x[it*CLUSTER_SIZE:(it+1)*CLUSTER_SIZE,1] = torch.randn(CLUSTER_SIZE) * 0.05 + y_axis[j]
+            it += 1
 elif args.dataset == 'ellipse':
     r = 4
     th = torch.rand(NUM_OF_POINTS) * np.pi * 2.0
@@ -82,15 +82,15 @@ elif args.dataset == 'gmm':
     for i in range(k):
         rand_std = torch.rand(1,2, device=device)*2 + 0.5
         rand_mu = torch.rand(1,2, device=device)*24 - 12
-        x[i*cluster_size:(i+1)*cluster_size] = x[i*cluster_size:(i+1)*cluster_size] * rand_std + rand_mu 
+        x[i*cluster_size:(i+1)*cluster_size] = x[i*cluster_size:(i+1)*cluster_size] * rand_std + rand_mu
 
 x = x.to(device)
 
-z_dim = 1
+z_dim = 2
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
-# generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
-generator = models.MoE(in_features=z_dim, out_features=2, num_leafs=8, projection='linear')
+generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
+# generator = models.MoE(in_features=z_dim, out_features=2, num_leafs=8, projection='linear')
 # discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
 # generator = models.MLP(layer_info=[z_dim, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
 discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 1], activation=torch.nn.ReLU(), normalization=None)

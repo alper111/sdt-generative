@@ -83,7 +83,7 @@ elif args.dataset == 'gmm':
 
 x = x.to(device)
 
-z_dim = 1
+z_dim = 2
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
 num_g = 8
