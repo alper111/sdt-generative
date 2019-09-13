@@ -89,10 +89,12 @@ x = x.to(device)
 z_dim = 2
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
-generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
-# generator = models.MoE(in_features=z_dim, out_features=2, num_leafs=8, projection='linear')
-# discriminator = models.SoftTree(in_features=2, out_features=1, depth=5, projection='linear')
-# generator = models.MLP(layer_info=[z_dim, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
+if args.title == "HME":
+    generator = models.SoftTree(in_features=z_dim, out_features=2, depth=3, projection='linear')
+elif args.title == "ME":
+    generator = models.MoE(in_features=z_dim, out_features=2, num_leafs=8, projection='linear')
+else:
+    generator = models.MLP(layer_info=[z_dim, 20, 20, 20, 20, 2], activation=torch.nn.ReLU(), normalization=None)
 discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
