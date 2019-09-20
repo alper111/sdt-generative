@@ -228,7 +228,7 @@ class SoftTree(torch.nn.Module):
         self.depth = depth
         self.in_features = in_features
         self.out_features = out_features
-        self.leaf_count = int(numpy.power(2,depth))
+        self.leaf_count = int(2**depth)
         self.gate_count = int(self.leaf_count - 1)
         self.gw = torch.nn.Parameter(
             torch.nn.init.kaiming_normal_(
@@ -254,22 +254,7 @@ class SoftTree(torch.nn.Module):
             self.std = torch.nn.Parameter(torch.randn(out_features, self.leaf_count))
         
     def forward(self, x):
-        gw_ = self.drop(self.gw)
-        gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
-        leaf_probs = None
-        node_densities = torch.ones(x.shape[0], 2**(self.depth+1)-1, device=x.device)
-        it = 1
-        for d in range(1, self.depth+1):
-            for i in range(2**d):
-                parent_index = (it+1) // 2 - 1
-                child_way = (it+1) % 2
-                if child_way == 0:
-                    parent_gating = gatings[:, parent_index]
-                else:
-                    parent_gating = 1 - gatings[:, parent_index]
-                parent_density = node_densities[:, parent_index].clone()
-                node_densities[:, it] = (parent_density * parent_gating)
-                it += 1
+        node_densities = self.node_densities(x)
         leaf_probs = node_densities[:, -self.leaf_count:].t()
 
         if self.proj == 'linear':
@@ -300,22 +285,21 @@ class SoftTree(torch.nn.Module):
             self.proj)
     
     def node_densities(self, x):
-        with torch.no_grad():
-            gw_ = self.drop(self.gw)
-            gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
-            node_densities = torch.ones(x.shape[0], 2**(self.depth+1)-1, device=x.device)
-            it = 1
-            for d in range(1, self.depth+1):
-                for i in range(2**d):
-                    parent_index = (it+1) // 2 - 1
-                    child_way = (it+1) % 2
-                    if child_way == 0:
-                        parent_gating = gatings[:, parent_index]
-                    else:
-                        parent_gating = 1 - gatings[:, parent_index]
-                    parent_density = node_densities[:, parent_index]
-                    node_densities[:, it] = (parent_density * parent_gating)
-                    it += 1
+        gw_ = self.drop(self.gw)
+        gatings = torch.sigmoid(torch.add(torch.matmul(x,gw_),self.gb))
+        node_densities = torch.ones(x.shape[0], 2**(self.depth+1)-1, device=x.device)
+        it = 1
+        for d in range(1, self.depth+1):
+            for i in range(2**d):
+                parent_index = (it+1) // 2 - 1
+                child_way = (it+1) % 2
+                if child_way == 0:
+                    parent_gating = gatings[:, parent_index]
+                else:
+                    parent_gating = 1 - gatings[:, parent_index]
+                parent_density = node_densities[:, parent_index].clone()
+                node_densities[:, it] = (parent_density * parent_gating)
+                it += 1
         return node_densities
     
     def gatings(self, x):
