@@ -68,7 +68,7 @@ def gradient_penalty(D, x_true, x_fake, derivative, device):
     else:
         alpha = torch.rand(x_true.size()[0],1,1,1,device=device)
 
-    alpha = alpha.expand(x_true.size())    
+    alpha = alpha.expand(x_true.size())
     interpolates = alpha * x_true + (1-alpha) * x_fake
     interpolates = torch.autograd.Variable(interpolates,requires_grad=True)
     disc_interpolates = D(interpolates)
