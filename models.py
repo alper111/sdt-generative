@@ -627,3 +627,140 @@ class InceptionV3(torch.nn.Module):
         x = (x-self.mean)/self.std
         x = self.transform(x, mode='bilinear', size=(299, 299), align_corners=False)
         return self.inception(x)
+
+def conv3x3(in_channels, out_channels, stride=1):
+    return torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, 
+                     stride=stride, padding=1, bias=False)
+
+# original residual block
+class ResidualBlock(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, resample=None):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = conv3x3(in_channels, out_channels, stride)
+        self.bn1 = torch.nn.BatchNorm2d(out_channels)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(out_channels, out_channels)
+        self.bn2 = torch.nn.BatchNorm2d(out_channels)
+        self.resample = resample
+        
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        if self.resample:
+            residual = self.resample(x)
+        out += residual
+        out = self.relu(out)
+        return out
+
+# pre-activation residual block
+class PreActResidualBlock(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, resample=None):
+        super(PreActResidualBlock, self).__init__()
+        self.bn1 = torch.nn.BatchNorm2d(in_channels)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.conv1 = conv3x3(in_channels, out_channels, stride)
+        self.bn2 = torch.nn.BatchNorm2d(out_channels)
+        self.conv2 = conv3x3(out_channels, out_channels)
+        self.resample = resample
+        if in_channels > out_channels:
+            self.conv1x1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
+
+
+    def forward(self, x):
+        residual = x
+        out = self.bn1(x)
+        out = self.relu(out)
+        out = self.conv1(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        # map residual to reduce channels with 1x1 convolution
+        if residual.shape[1] > out.shape[1]:
+            residual = self.conv1x1(residual)
+        # increase residual's channels with zeros.
+        elif residual.shape[1] < out.shape[1]:
+            ch_num = out.shape[1] - residual.shape[1]
+            zero_channel = torch.zeros(residual.shape[0], ch_num, residual.shape[2], residual.shape[3], device=x.device)
+            residual = torch.cat([residual, zero_channel], dim=1)
+        out += residual
+        if self.resample == 'upsample':
+            out = torch.nn.functional.interpolate(out, scale_factor=2)
+        elif self.resample == 'downsample':
+            out = torch.nn.functional.interpolate(out, scale_factor=0.5)
+        return out
+
+class ResNetGenerator(torch.nn.Module):
+    def __init__(self, block, channels, layers, input_shape, latent_dim, depth, projection="linear", dropout=0.0):
+        super(ResNetGenerator, self).__init__()
+
+        self.input_shape = input_shape
+        self.dense = SoftTree(in_features=latent_dim, out_features=input_shape[0] * input_shape[1] * input_shape[2], depth=depth, dropout=dropout, projection=projection)
+        # self.dense = torch.nn.Linear(latent_dim, input_shape[0]*input_shape[1]*input_shape[2], bias=False)
+        self.layer1 = self.make_layer(block, in_channels=channels[0], out_channels=channels[1], blocks=layers[0], resample='upsample')
+        self.layer2 = self.make_layer(block, in_channels=channels[1], out_channels=channels[2], blocks=layers[1], resample='upsample')
+        self.layer3 = self.make_layer(block, in_channels=channels[2], out_channels=channels[3], blocks=layers[2], resample='upsample')
+        self.layer4 = self.make_layer(block, in_channels=channels[3], out_channels=channels[4], blocks=layers[3], resample='upsample')
+        self.layer5 = self.make_layer(block, in_channels=channels[4], out_channels=channels[5], blocks=layers[4], resample='upsample')
+
+        self.bn1 = torch.nn.BatchNorm2d(channels[-1])
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.conv1 = torch.nn.Conv2d(in_channels=channels[-1], out_channels=3, kernel_size=3, stride=1, padding=1)
+        
+    def make_layer(self, block, in_channels, out_channels, blocks, resample):
+        layers = []
+        layers.append(block(in_channels, out_channels, resample=resample))
+        self.in_channels = out_channels
+        for i in range(1, blocks):
+            layers.append(block(out_channels, out_channels))
+        return torch.nn.Sequential(*layers)
+    
+    def forward(self, x):
+        out = self.dense(x)
+        out = out.view(-1, self.input_shape[0], self.input_shape[1], self.input_shape[2])
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.layer5(out)
+        out = self.conv1(self.relu(self.bn1(out)))
+
+        return out
+
+class ResNetDiscriminator(torch.nn.Module):
+    def __init__(self, block, channels, layers, input_shape, latent_dim):
+        super(ResNetDiscriminator, self).__init__()
+
+        self.input_shape = input_shape
+        self.conv1 = torch.nn.Conv2d(in_channels=3, out_channels=channels[0], kernel_size=3, stride=1, padding=1)
+        self.layer1 = self.make_layer(block, in_channels=channels[0], out_channels=channels[1], blocks=layers[0], resample='downsample')
+        self.layer2 = self.make_layer(block, in_channels=channels[1], out_channels=channels[2], blocks=layers[1], resample='downsample')
+        self.layer3 = self.make_layer(block, in_channels=channels[2], out_channels=channels[3], blocks=layers[2], resample='downsample')
+        self.layer4 = self.make_layer(block, in_channels=channels[3], out_channels=channels[4], blocks=layers[3], resample='downsample')
+        self.layer5 = self.make_layer(block, in_channels=channels[4], out_channels=channels[5], blocks=layers[4], resample=None)
+        self.avg_pool = torch.nn.AvgPool2d(kernel_size=(input_shape[1]//16, input_shape[2]//16))
+        self.dense = Linear(in_features=channels[-1], out_features=latent_dim)
+        
+    def make_layer(self, block, in_channels, out_channels, blocks, resample):
+        layers = []
+        layers.append(block(in_channels, out_channels, resample=resample))
+        self.in_channels = out_channels
+        for i in range(1, blocks):
+            layers.append(block(out_channels, out_channels))
+        return torch.nn.Sequential(*layers)
+    
+    def forward(self, x):
+        out = self.conv1(x)
+        # out = out.view(-1, self.input_shape[0], self.input_shape[1], self.input_shape[2])
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.layer5(out)
+        out = self.avg_pool(out)
+        out = out.view(out.shape[0], -1)
+        out = self.dense(out)
+        return out

@@ -110,6 +110,15 @@ elif args.g_model == "conv":
         ),
         torch.nn.Tanh()
     )
+elif args.g_model == "resnet":
+    generator = models.ResNetGenerator(
+        block=models.PreActResidualBlock,
+        channels=args.g_layers,
+        layers=[3, 3, 3, 3, 3],
+        input_shape=args.input_shape,
+        latent_dim=args.z_dim,
+        depth=args.g_depth
+    )
 else:
     generator = torch.nn.Sequential(
         models.MixtureDecoder(
@@ -142,6 +151,14 @@ elif args.d_model == "conv":
         std=0.02,
         normalization=args.d_norm,
         num_classes=num_of_classes)
+elif args.d_model == "resnet":
+    discriminator = models.ResNetDiscriminator(
+        block=models.PreActResidualBlock,
+        channels=args.d_layers,
+        layers=[3, 3, 3, 3, 3],
+        input_shape=[num_of_channels, height, width],
+        latent_dim=1
+    )
 else:
     discriminator = models.MixtureEncoder(
         channels=args.d_layers,
