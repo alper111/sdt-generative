@@ -312,7 +312,7 @@ class SoftTree(torch.nn.Module):
         current = 0
         if level is None:
             level = self.depth
-            
+
         for i in range(level):
             if int(gateways[i]) == 0:
                 L += gatings[:, current].mean()
@@ -644,8 +644,7 @@ class InceptionV3(torch.nn.Module):
         return self.inception(x)
 
 def conv3x3(in_channels, out_channels, stride=1):
-    return torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, 
-                     stride=stride, padding=1, bias=False)
+    return torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
 
 # original residual block
 class ResidualBlock(torch.nn.Module):
@@ -673,26 +672,29 @@ class ResidualBlock(torch.nn.Module):
 
 # pre-activation residual block
 class PreActResidualBlock(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, resample=None):
+    def __init__(self, in_channels, out_channels, stride=1, resample=None, normalization="batch_norm", input_size=None):
         super(PreActResidualBlock, self).__init__()
-        self.bn1 = torch.nn.BatchNorm2d(in_channels)
-        self.relu = torch.nn.ReLU(inplace=True)
-        self.conv1 = conv3x3(in_channels, out_channels, stride)
-        self.bn2 = torch.nn.BatchNorm2d(out_channels)
-        self.conv2 = conv3x3(out_channels, out_channels)
+        self.block = []
+        if normalization == "batch_norm":
+            self.block.append(torch.nn.BatchNorm2d(in_channels))
+        elif normalization == "layer_norm":
+            self.block.append(torch.nn.LayerNorm((in_channels, input_size[0], input_size[1])))            
+        self.block.append(torch.nn.ReLU(inplace=True))
+        self.block.append(conv3x3(in_channels, out_channels, stride))
+        if normalization == "batch_norm":
+            self.block.append(torch.nn.BatchNorm2d(out_channels))
+        elif normalization == "layer_norm":
+            self.block.append(torch.nn.LayerNorm((out_channels, input_size[0], input_size[1])))
+        self.block.append(torch.nn.ReLU(inplace=True))
+        self.block.append(conv3x3(out_channels, out_channels))
         self.resample = resample
         if in_channels > out_channels:
             self.conv1x1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
-
+        self.block = torch.nn.Sequential(*self.block)
 
     def forward(self, x):
         residual = x
-        out = self.bn1(x)
-        out = self.relu(out)
-        out = self.conv1(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-        out = self.conv2(out)
+        out = self.block(x)
         # map residual to reduce channels with 1x1 convolution
         if residual.shape[1] > out.shape[1]:
             residual = self.conv1x1(residual)
@@ -709,25 +711,24 @@ class PreActResidualBlock(torch.nn.Module):
         return out
 
 class ResNetGenerator(torch.nn.Module):
-    def __init__(self, block, channels, layers, input_shape, latent_dim, depth, projection="linear", dropout=0.0):
+    def __init__(self, block, channels, layers, input_shape, latent_dim, depth, out_channels, normalization, projection="linear", dropout=0.0):
         super(ResNetGenerator, self).__init__()
 
         self.input_shape = input_shape
         self.dense = SoftTree(in_features=latent_dim, out_features=input_shape[0] * input_shape[1] * input_shape[2], depth=depth, dropout=dropout, projection=projection)
-        # self.dense = torch.nn.Linear(latent_dim, input_shape[0]*input_shape[1]*input_shape[2], bias=False)
-        self.layer1 = self.make_layer(block, in_channels=channels[0], out_channels=channels[1], blocks=layers[0], resample='upsample')
-        self.layer2 = self.make_layer(block, in_channels=channels[1], out_channels=channels[2], blocks=layers[1], resample='upsample')
-        self.layer3 = self.make_layer(block, in_channels=channels[2], out_channels=channels[3], blocks=layers[2], resample='upsample')
-        self.layer4 = self.make_layer(block, in_channels=channels[3], out_channels=channels[4], blocks=layers[3], resample='upsample')
-        self.layer5 = self.make_layer(block, in_channels=channels[4], out_channels=channels[5], blocks=layers[4], resample='upsample')
-
-        self.bn1 = torch.nn.BatchNorm2d(channels[-1])
-        self.relu = torch.nn.ReLU(inplace=True)
-        self.conv1 = torch.nn.Conv2d(in_channels=channels[-1], out_channels=3, kernel_size=3, stride=1, padding=1)
+        self.res_blocks = []
+        for i in range(len(layers)):
+            self.res_blocks.append(self.make_layer(block, in_channels=channels[i], out_channels=channels[i+1], blocks=layers[i], resample="upsample", normalization=normalization, input_size=None))
         
-    def make_layer(self, block, in_channels, out_channels, blocks, resample):
+        if normalization == "batch_norm":
+            self.res_blocks.append(torch.nn.BatchNorm2d(channels[-1]))
+        self.res_blocks.append(torch.nn.ReLU(inplace=True))
+        self.res_blocks.append(torch.nn.Conv2d(in_channels=channels[-1], out_channels=out_channels, kernel_size=3, stride=1, padding=1))
+        self.res_blocks = torch.nn.Sequential(*self.res_blocks)
+        
+    def make_layer(self, block, in_channels, out_channels, blocks, resample, normalization, input_size):
         layers = []
-        layers.append(block(in_channels, out_channels, resample=resample))
+        layers.append(block(in_channels, out_channels, resample=resample, normalization=normalization, input_size=input_size))
         self.in_channels = out_channels
         for i in range(1, blocks):
             layers.append(block(out_channels, out_channels))
@@ -736,46 +737,34 @@ class ResNetGenerator(torch.nn.Module):
     def forward(self, x):
         out = self.dense(x)
         out = out.view(-1, self.input_shape[0], self.input_shape[1], self.input_shape[2])
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = self.layer5(out)
-        out = self.conv1(self.relu(self.bn1(out)))
-
-        return out
+        return self.res_blocks(out)
 
 class ResNetDiscriminator(torch.nn.Module):
-    def __init__(self, block, channels, layers, input_shape, latent_dim):
+    def __init__(self, block, channels, layers, input_shape, latent_dim, in_channels, normalization):
         super(ResNetDiscriminator, self).__init__()
-
-        self.input_shape = input_shape
-        self.conv1 = torch.nn.Conv2d(in_channels=3, out_channels=channels[0], kernel_size=3, stride=1, padding=1)
-        self.layer1 = self.make_layer(block, in_channels=channels[0], out_channels=channels[1], blocks=layers[0], resample='downsample')
-        self.layer2 = self.make_layer(block, in_channels=channels[1], out_channels=channels[2], blocks=layers[1], resample='downsample')
-        self.layer3 = self.make_layer(block, in_channels=channels[2], out_channels=channels[3], blocks=layers[2], resample='downsample')
-        self.layer4 = self.make_layer(block, in_channels=channels[3], out_channels=channels[4], blocks=layers[3], resample='downsample')
-        self.layer5 = self.make_layer(block, in_channels=channels[4], out_channels=channels[5], blocks=layers[4], resample=None)
-        self.avg_pool = torch.nn.AvgPool2d(kernel_size=(input_shape[1]//16, input_shape[2]//16))
+        scale_factor = 2**(len(layers)-1)
+        self.res_blocks = []
+        self.res_blocks.append(torch.nn.Conv2d(in_channels=in_channels, out_channels=channels[0], kernel_size=3, stride=1, padding=1))
+        current_shape = input_shape[1:].copy()
+        for i in range(len(layers)-1):
+            self.res_blocks.append(self.make_layer(block, in_channels=channels[i], out_channels=channels[i+1], blocks=layers[i], resample="downsample", normalization=normalization, input_size=current_shape))
+            current_shape[0] //= 2
+            current_shape[1] //= 2
+        self.res_blocks.append(self.make_layer(block, in_channels=channels[-2], out_channels=channels[-1], blocks=layers[-1], resample=None, normalization=normalization, input_size=current_shape))
+        self.res_blocks.append(torch.nn.AvgPool2d(kernel_size=(input_shape[1]//scale_factor, input_shape[2]//scale_factor)))
+        self.res_blocks = torch.nn.Sequential(*self.res_blocks)
         self.dense = Linear(in_features=channels[-1], out_features=latent_dim)
         
-    def make_layer(self, block, in_channels, out_channels, blocks, resample):
+    def make_layer(self, block, in_channels, out_channels, blocks, resample, normalization, input_size):
         layers = []
-        layers.append(block(in_channels, out_channels, resample=resample))
+        layers.append(block(in_channels, out_channels, resample=resample, normalization=normalization, input_size=input_size))
         self.in_channels = out_channels
         for i in range(1, blocks):
             layers.append(block(out_channels, out_channels))
         return torch.nn.Sequential(*layers)
     
     def forward(self, x):
-        out = self.conv1(x)
-        # out = out.view(-1, self.input_shape[0], self.input_shape[1], self.input_shape[2])
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = self.layer5(out)
-        out = self.avg_pool(out)
+        out = self.res_blocks(x)
         out = out.view(out.shape[0], -1)
         out = self.dense(out)
         return out
