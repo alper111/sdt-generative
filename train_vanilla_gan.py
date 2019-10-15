@@ -29,6 +29,7 @@ parser.add_argument("-d_layers", help="discriminator layer info", nargs="+", typ
 parser.add_argument("-d_depth", help="discriminator tree depth", type=int)
 parser.add_argument("-d_proj", help="discriminator leaf projection. default constant", type=str, default="constant")
 parser.add_argument("-d_norm", help="discriminator normalization layer. batch_norm, layer_norm", type=str, default=None)
+parser.add_argument("-resblock", help="number of layers in each resnet block for both G and D", type=int)
 parser.add_argument("-input_shape", help="if you use conv generator, this is the dimension from which gen starts deconving.", nargs="+", type=int)
 parser.add_argument("-z_dim", help="dimensionality of z. default 100.", default=100, type=int)
 parser.add_argument("-batch_size", help="batch size. default 128.", default=128, type=int)
@@ -114,7 +115,7 @@ elif args.g_model == "resnet":
     generator = models.ResNetGenerator(
         block=models.PreActResidualBlock,
         channels=args.g_layers,
-        layers=[1, 1, 1],
+        layers=[args.resblock]*(len(args.g_layers)-1),
         input_shape=args.input_shape,
         latent_dim=args.z_dim,
         depth=args.g_depth,
@@ -157,7 +158,7 @@ elif args.d_model == "resnet":
     discriminator = models.ResNetDiscriminator(
         block=models.PreActResidualBlock,
         channels=args.d_layers,
-        layers=[1, 1, 1],
+        layers=[args.resblock]*(len(args.d_layers)-1),
         input_shape=[num_of_channels, height, width],
         latent_dim=1,
         in_channels=num_of_channels,
