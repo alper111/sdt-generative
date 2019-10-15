@@ -304,6 +304,23 @@ class SoftTree(torch.nn.Module):
     
     def gatings(self, x):
         return torch.sigmoid(torch.add(torch.matmul(x,self.gw),self.gb))
+    
+    def total_path_value(self, z, index, level=None):
+        gatings = self.gatings(z)
+        gateways = numpy.binary_repr(index, width=self.depth)
+        L = 0.
+        current = 0
+        if level is None:
+            level = self.depth
+            
+        for i in range(level):
+            if int(gateways[i]) == 0:
+                L += gatings[:, current].mean()
+                current = 2 * current + 1
+            else:
+                L += (1 - gatings[:, current]).mean()
+                current = 2 * current + 2
+        return L
 
 class MixtureDecoder(torch.nn.Module):
     def __init__(self, channels, input_shape, latent_dim, mixture, depth, projection='constant', activation=torch.nn.ReLU(), dropout=0.0, std=None, normalization=None):
