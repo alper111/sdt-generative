@@ -731,7 +731,7 @@ class ResNetGenerator(torch.nn.Module):
         layers.append(block(in_channels, out_channels, resample=resample, normalization=normalization, input_size=input_size))
         self.in_channels = out_channels
         for i in range(1, blocks):
-            layers.append(block(out_channels, out_channels))
+            layers.append(block(out_channels, out_channels, normalization=normalization))
         return torch.nn.Sequential(*layers)
     
     def forward(self, x):
