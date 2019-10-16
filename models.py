@@ -672,7 +672,7 @@ class ResidualBlock(torch.nn.Module):
 
 # pre-activation residual block
 class PreActResidualBlock(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, resample=None, normalization="batch_norm", input_size=None):
+    def __init__(self, in_channels, out_channels, normalization, stride=1, resample=None, input_size=None):
         super(PreActResidualBlock, self).__init__()
         self.block = []
         if normalization == "batch_norm":
