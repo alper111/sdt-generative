@@ -180,6 +180,10 @@ if args.ckpt is not None:
     print("using checkpoint...")
     generator.load_state_dict(torch.load(os.path.join(args.ckpt, "gen.ckpt")))
     discriminator.load_state_dict(torch.load(os.path.join(args.ckpt, "disc.ckpt")))
+
+generator = torch.nn.DataParallel(generator)
+discriminator = torch.nn.DataParallel(discriminator)
+
 generator = generator.to(DEVICE)
 discriminator = discriminator.to(DEVICE)
 
