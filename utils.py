@@ -30,7 +30,10 @@ def gumbel_softmax(logits, temp=1.):
     return y
 
 def p2dist(x, y):
-    return torch.pow(x, 2).sum(dim=1).view(-1,1) - 2 * torch.matmul(x, y.t()) + torch.pow(y, 2).sum(dim=1)
+    y_dim = len(y.shape)
+    return torch.pow(x, 2).sum(dim=-1).view(x.shape[:-1]+(1,)) - \
+        2 * torch.matmul(x, y.permute(list(range(y_dim-2))+[y_dim-1, y_dim-2])) + \
+            torch.pow(y, 2).sum(dim=-1).view(y.shape[:-2]+(1,y.shape[-2]))
 
 def nn_accuracy(p_fake, p_real, device=torch.device('cpu'), k=5):
     size = p_fake.shape[0]
