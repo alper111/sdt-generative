@@ -87,7 +87,7 @@ class ConvBlock(torch.nn.Module):
 
 '''DCGAN-like convolutional encoder'''
 class ConvEncoder(torch.nn.Module):
-    def __init__(self, channels, input_shape, latent_dim, activation=torch.nn.ReLU(), std=None, normalization=None, conditional=False, num_classes=10):
+    def __init__(self, channels, input_shape, latent_dim, activation=torch.nn.ReLU(), std=None, normalization=None, conditional=False, num_classes=10, parallel=False):
         super(ConvEncoder, self).__init__()
         self.conditional = conditional
         convolutions = []
@@ -101,6 +101,8 @@ class ConvEncoder(torch.nn.Module):
                 convolutions.append(torch.nn.LayerNorm(current_shape))
             convolutions.append(activation)
         self.convolutions = torch.nn.Sequential(*convolutions)
+        if parallel:
+            self.convolutions = torch.nn.DataParallel(self.convolutions)
         self.dense = Linear(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=latent_dim, std=std, normalization=None)
         if conditional:
             self.dense_cond = torch.nn.Linear(in_features=current_shape[0] * current_shape[1] * current_shape[2], out_features=num_classes, bias=False)
@@ -711,7 +713,7 @@ class PreActResidualBlock(torch.nn.Module):
         return out
 
 class ResNetGenerator(torch.nn.Module):
-    def __init__(self, block, channels, layers, input_shape, latent_dim, depth, out_channels, normalization, projection="linear", dropout=0.0):
+    def __init__(self, block, channels, layers, input_shape, latent_dim, depth, out_channels, normalization, projection="linear", dropout=0.0, parallel=False):
         super(ResNetGenerator, self).__init__()
 
         self.input_shape = input_shape
@@ -725,6 +727,8 @@ class ResNetGenerator(torch.nn.Module):
         self.res_blocks.append(torch.nn.ReLU(inplace=True))
         self.res_blocks.append(torch.nn.Conv2d(in_channels=channels[-1], out_channels=out_channels, kernel_size=3, stride=1, padding=1))
         self.res_blocks = torch.nn.Sequential(*self.res_blocks)
+        if parallel:
+            self.res_blocks = torch.nn.DataParallel(self.res_blocks)
         
     def make_layer(self, block, in_channels, out_channels, blocks, resample, normalization, input_size):
         layers = []
@@ -740,7 +744,7 @@ class ResNetGenerator(torch.nn.Module):
         return self.res_blocks(out)
 
 class ResNetDiscriminator(torch.nn.Module):
-    def __init__(self, block, channels, layers, input_shape, latent_dim, in_channels, normalization):
+    def __init__(self, block, channels, layers, input_shape, latent_dim, in_channels, normalization, parallel=False):
         super(ResNetDiscriminator, self).__init__()
         scale_factor = 2**(len(layers)-1)
         self.res_blocks = []
@@ -753,6 +757,9 @@ class ResNetDiscriminator(torch.nn.Module):
         self.res_blocks.append(self.make_layer(block, in_channels=channels[-2], out_channels=channels[-1], blocks=layers[-1], resample=None, normalization=normalization, input_size=current_shape))
         self.res_blocks.append(torch.nn.AvgPool2d(kernel_size=(input_shape[1]//scale_factor, input_shape[2]//scale_factor)))
         self.res_blocks = torch.nn.Sequential(*self.res_blocks)
+        if parallel:
+            self.res_blocks = torch.nn.DataParallel(self.res_blocks)
+        
         self.dense = Linear(in_features=channels[-1], out_features=latent_dim)
         
     def make_layer(self, block, in_channels, out_channels, blocks, resample, normalization, input_size):

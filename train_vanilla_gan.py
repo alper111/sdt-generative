@@ -55,6 +55,7 @@ args = parser.parse_args()
 WASSERSTEIN = True if args.wasserstein == 1 else False
 ACC = True if args.acc == 1 else False
 DEVICE = torch.device(args.device)
+parallel = True if torch.cuda.device_count() > 1 else False
 
 np.random.seed(args.seed)
 torch.random.manual_seed(args.seed)
@@ -120,7 +121,8 @@ elif args.g_model == "resnet":
         latent_dim=args.z_dim,
         depth=args.g_depth,
         out_channels=num_of_channels,
-        normalization=args.g_norm
+        normalization=args.g_norm,
+        parallel=parallel
     )
 else:
     generator = torch.nn.Sequential(
@@ -153,7 +155,8 @@ elif args.d_model == "conv":
         activation=torch.nn.LeakyReLU(0.2),
         std=0.02,
         normalization=args.d_norm,
-        num_classes=num_of_classes)
+        num_classes=num_of_classes,
+        parallel=parallel)
 elif args.d_model == "resnet":
     discriminator = models.ResNetDiscriminator(
         block=models.PreActResidualBlock,
@@ -180,9 +183,6 @@ if args.ckpt is not None:
     print("using checkpoint...")
     generator.load_state_dict(torch.load(os.path.join(args.ckpt, "gen.ckpt")))
     discriminator.load_state_dict(torch.load(os.path.join(args.ckpt, "disc.ckpt")))
-
-generator = torch.nn.DataParallel(generator)
-discriminator = torch.nn.DataParallel(discriminator)
 
 generator = generator.to(DEVICE)
 discriminator = discriminator.to(DEVICE)
@@ -368,8 +368,8 @@ for e in range(args.epoch):
         np.save("fre.npy", fid_total)
         np.save("disc_grads.npy", disc_grads_total)
         np.save("gen_grads.npy", gen_grads_total)
-        torch.save(generator.module.cpu().state_dict(), "gen.ckpt")
-        torch.save(discriminator.module.cpu().state_dict(), "disc.ckpt")
+        torch.save(generator.cpu().state_dict(), "gen.ckpt")
+        torch.save(discriminator.cpu().state_dict(), "disc.ckpt")
         generator.to(DEVICE)
         discriminator.to(DEVICE)
         generator.train()
