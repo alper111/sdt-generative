@@ -86,8 +86,9 @@ x = x.to(device)
 z_dim = 2
 z = torch.randn(NUM_OF_POINTS, z_dim, device=device)
 
-generator = models.MultiLinear(in_features=z_dim, out_features=2, num_of_generators=8)
-discriminator = models.MLP(layer_info=[2, 20, 20, 20, 20, 9], activation=torch.nn.ReLU(), normalization=None)
+numg = 25
+generator = models.MultiLinear(in_features=z_dim, out_features=2, num_of_generators=numg)
+discriminator = models.MLP(layer_info=[2, 400, 400, 400, 400, numg+1], activation=torch.nn.ReLU(), normalization=None)
 
 generator.to(device)
 discriminator.to(device)
@@ -145,7 +146,7 @@ for e in range(NUM_OF_EPOCHS):
         # train discriminator with fake data
         x_fake = generator(torch.randn(args.batch_size, z_dim, device=device))
         d_fake = discriminator(x_fake)
-        labels = torch.arange(8, device=device, dtype=torch.int64)+1
+        labels = torch.arange(numg, device=device, dtype=torch.int64)+1
         labels = labels.repeat_interleave(args.batch_size)
         d_fake_loss = ce_with_logits(d_fake, labels)
         # d_fake_loss = criterion(d_fake, torch.zeros_like(d_fake,device=device))
@@ -163,7 +164,7 @@ for e in range(NUM_OF_EPOCHS):
 
         x_fake = generator(torch.randn(args.batch_size, z_dim, device=device))
         g_loss = torch.softmax(discriminator(x_fake), dim=1)[:, 0]
-        g_loss = bce_with_logits(g_loss, torch.ones(args.batch_size * 8, device=device, dtype=torch.float))
+        g_loss = bce_with_logits(g_loss, torch.ones(args.batch_size * numg, device=device, dtype=torch.float))
         # g_loss = criterion(g_fake,torch.ones_like(g_fake, device=device))
         g_loss.backward()
         optimG.step()
