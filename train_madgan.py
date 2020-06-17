@@ -182,7 +182,8 @@ for e in range(args.epoch):
     schedulerD.step()
     gen_loss_total.append(gen_avg_loss/loop_per_epoch)
     disc_loss_total.append(disc_avg_loss/(loop_per_epoch))
-    print("epoch: %d - disc loss: %.5f - gen loss: %.5f - time elapsed: %.3f" % (e+1, disc_loss_total[-1], gen_loss_total[-1], finish-start))
+    print("epoch: %d - disc loss: %.5f - gen loss: %.5f - time elapsed: %.3f" % 
+          (e+1, disc_loss_total[-1], gen_loss_total[-1], finish-start))
 
     if e+1 == 1:
         epoch_time = finish - start
