@@ -2,4 +2,6 @@
 
 This repository contains experimental setup that I have used for my M.S. thesis.
 
-see: https://alper111.github.io/ms-thesis
+also see:  
+https://alpera.xyz/hmog  
+https://github.com/alper111/hmog
